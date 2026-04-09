@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Doctor Dashboard – SheCare AI</title>
+  <meta name="description" content="SheCare AI doctor portal – manage patient requests, view health summaries, and chat with patients."/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="styles.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    /* ── Patient list sidebar ── */
+    .patient-list { display: flex; flex-direction: column; gap: 10px; }
+
+    /* ── Summary section inside detail panel ── */
+    .detail-section-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-dark);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1.5px solid var(--border);
+    }
+
+    /* ── Stats grid ── */
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat-box {
+      background: var(--pink-50);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      text-align: center;
+    }
+    .stat-box .stat-val { font-size: 22px; font-weight: 700; color: var(--pink-600); font-family: 'Playfair Display', serif; }
+    .stat-box .stat-key { font-size: 11px; color: var(--text-light); margin-top: 2px; }
+
+    /* ── Symptom row ── */
+    .sym-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 0;
+      font-size: 13px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-mid);
+    }
+    .sym-row:last-child { border-bottom: none; }
+    .sym-yes { color: var(--pink-600); font-weight: 600; }
+    .sym-no  { color: #86efac; font-weight: 500; }
+
+    /* ── Tab toggle ── */
+    .dtab-btn {
+      padding: 8px 20px;
+      border-radius: 50px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+      background: transparent;
+      color: var(--text-mid);
+    }
+    .dtab-btn.active { background: var(--pink-600); color: white; box-shadow: 0 2px 10px rgba(201,75,106,0.35); }
+    .dtab-panel { display: none; }
+    .dtab-panel.active { display: block; animation: fadeInUp 0.35s ease; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 24px;
+      text-align: center;
+    }
+    .empty-state .empty-icon { font-size: 52px; margin-bottom: 16px; }
+
+    /* ── Risk progress bar ── */
+    .risk-mini-bar { height: 8px; border-radius: 6px; background: #f9d0dc; overflow: hidden; margin-top: 4px; }
+    .risk-mini-fill { height: 100%; border-radius: 6px; }
+
+    /* ── Stats summary at top ── */
+    .stats-summary-bar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      padding: 20px 24px;
+      background: white;
+      border-bottom: 1.5px solid var(--border);
+    }
+    @media (max-width: 900px) {
+      .stats-summary-bar { grid-template-columns: repeat(2, 1fr); }
+      .doctor-grid { grid-template-columns: 1fr !important; }
+    }
+    @media (max-width: 540px) {
+      .stats-summary-bar { grid-template-columns: 1fr 1fr; padding: 14px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ======================================== -->
+<!-- NAVBAR                                   -->
+<!-- ======================================== -->
+<nav class="navbar" id="main-navbar">
+  <a href="#" class="navbar-logo">
+    <div style="width:34px;height:34px;background:linear-gradient(135deg,#f4778a,#c94b6a);border-radius:50%;display:flex;align-items:center;justify-content:center;">
+      <svg width="18" height="18" viewBox="0 0 48 48" fill="none">
+        <path d="M24 4C20 4 16 6 14 10C12 14 12 18 14 22C16 14 20 10 24 8C28 10 32 14 34 22C36 18 36 14 34 10C32 6 28 4 24 4Z" fill="white" opacity="0.9"/>
+        <path d="M24 8C20 12 14 20 14 28C14 36 18 42 24 44C30 42 34 36 34 28C34 20 28 12 24 8Z" fill="white" opacity="0.75"/>
+      </svg>
+    </div>
+    <span class="logo-name">SheCare AI</span>
+  </a>
+
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span style="font-size:12px;background:linear-gradient(135deg,var(--pink-100),#ede9fe);color:var(--mauve);border:1px solid var(--border);border-radius:50px;padding:3px 12px;font-weight:600;">👩‍⚕️ Doctor</span>
+    <div class="avatar" id="nav-avatar" title="Doctor Profile">D</div>
+    <span id="nav-name" style="font-size:14px;font-weight:500;color:var(--text-mid);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+    <button onclick="logout()" style="margin-left:6px;font-size:12px;color:var(--text-light);background:none;border:none;cursor:pointer;text-decoration:underline;">Logout</button>
+  </div>
+</nav>
+
+<!-- ======================================== -->
+<!-- STATS SUMMARY BAR                        -->
+<!-- ======================================== -->
+<div class="stats-summary-bar" id="stats-bar">
+  <div class="stat-box"><div class="stat-val" id="stat-total">—</div><div class="stat-key">Total Requests</div></div>
+  <div class="stat-box"><div class="stat-val" id="stat-pending" style="color:#92400e;">—</div><div class="stat-key">Pending</div></div>
+  <div class="stat-box"><div class="stat-val" id="stat-accepted" style="color:#16a34a;">—</div><div class="stat-key">Accepted</div></div>
+  <div class="stat-box"><div class="stat-val" id="stat-high" style="color:#dc2626;">—</div><div class="stat-key">High Risk Patients</div></div>
+</div>
+
+<!-- ======================================== -->
+<!-- MAIN GRID                                -->
+<!-- ======================================== -->
+<div style="display:grid;grid-template-columns:400px 1fr;gap:20px;padding:24px;min-height:calc(100vh - 128px);align-items:start;" id="doctor-main-grid">
+
+  <!-- ──────────────────────────────── -->
+  <!-- LEFT: REQUEST LIST               -->
+  <!-- ──────────────────────────────── -->
+  <div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <!-- Header -->
+      <div style="padding:20px 20px 14px;border-bottom:1.5px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+        <h2 class="serif" style="font-size:17px;font-weight:700;color:var(--text-dark);">Patient Requests</h2>
+        <button class="btn-outline-pink" style="padding:6px 14px;font-size:12px;" onclick="loadRequests()">↺ Refresh</button>
+      </div>
+
+      <!-- Filter tabs -->
+      <div style="display:flex;gap:6px;padding:12px 16px;border-bottom:1px solid var(--border);">
+        <button id="filter-all"      class="dtab-btn active" onclick="filterRequests('all')"     >All</button>
+        <button id="filter-pending"  class="dtab-btn" onclick="filterRequests('pending')"  >⏳ Pending</button>
+        <button id="filter-accepted" class="dtab-btn" onclick="filterRequests('accepted')" >✅ Accepted</button>
+        <button id="filter-rejected" class="dtab-btn" onclick="filterRequests('rejected')" >❌ Rejected</button>
+      </div>
+
+      <!-- Request items -->
+      <div id="request-list" style="padding:12px 16px;max-height:calc(100vh - 300px);overflow-y:auto;">
+        <p style="color:var(--text-light);font-size:14px;text-align:center;padding:32px 0;">Loading requests…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ──────────────────────────────── -->
+  <!-- RIGHT: DETAIL PANEL             -->
+  <!-- ──────────────────────────────── -->
+  <div id="detail-panel">
+
+    <!-- Empty state -->
+    <div id="detail-empty" class="card empty-state">
+      <div class="empty-icon">🩺</div>
+      <h3 class="serif" style="font-size:18px;font-weight:700;color:var(--text-dark);">Select a Patient</h3>
+      <p style="font-size:14px;color:var(--text-light);margin-top:8px;max-width:300px;line-height:1.6;">Click on any patient request from the left panel to view their health summary and send a message.</p>
+    </div>
+
+    <!-- Patient detail (hidden until selected) -->
+    <div id="detail-content" style="display:none;">
+
+      <!-- Patient header card -->
+      <div class="card fade-in-up" style="animation-delay:0s;margin-bottom:16px;background:linear-gradient(135deg,#fff0f3,#ffe4ed);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div class="avatar" id="pt-avatar" style="width:54px;height:54px;font-size:22px;flex-shrink:0;">P</div>
+            <div>
+              <h3 class="serif" id="pt-name" style="font-size:19px;font-weight:700;color:var(--text-dark);">—</h3>
+              <p id="pt-email" style="font-size:13px;color:var(--text-light);margin-top:1px;">—</p>
+              <p id="pt-age"   style="font-size:13px;color:var(--text-mid);margin-top:1px;">—</p>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+            <span id="pt-status-badge" class="badge">—</span>
+            <div style="display:flex;gap:8px;" id="action-buttons">
+              <button id="btn-accept" class="btn-accept" onclick="respondRequest('accepted')">✓ Accept</button>
+              <button id="btn-reject" class="btn-reject" onclick="respondRequest('rejected')">✗ Reject</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs: Summary | Messages -->
+      <div style="display:flex;gap:6px;margin-bottom:14px;">
+        <button id="dtab-summary"  class="dtab-btn active" onclick="switchDTab('summary')">📋 Health Summary</button>
+        <button id="dtab-messages" class="dtab-btn" onclick="switchDTab('messages')">💬 Messages</button>
+      </div>
+
+      <!-- ═══ Summary Panel ═══ -->
+      <div id="dpanel-summary" class="dtab-panel active">
+        <div class="card fade-in-up" style="animation-delay:0.05s;">
+
+          <!-- Risk result -->
+          <div style="margin-bottom:18px;">
+            <p class="detail-section-title">Risk Assessment</p>
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+              <div>
+                <p style="font-size:13px;color:var(--text-light);">PCOS Risk Level</p>
+                <p id="sum-risk-label" class="serif" style="font-size:20px;font-weight:700;color:var(--pink-600);">—</p>
+              </div>
+              <div style="flex:1;min-width:120px;">
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-light);margin-bottom:4px;">
+                  <span>Low</span><span id="sum-risk-pct">—</span><span>High</span>
+                </div>
+                <div class="risk-mini-bar">
+                  <div id="sum-risk-bar" class="risk-mini-fill" style="width:0%;background:linear-gradient(90deg,#f4778a,#c94b6a);transition:width 0.8s ease;"></div>
+                </div>
+              </div>
+              <div>
+                <p style="font-size:11px;color:var(--text-light);">Rule Score</p>
+                <p id="sum-score" style="font-size:20px;font-weight:700;color:var(--text-dark);font-family:'Playfair Display',serif;">—</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Latest symptoms -->
+          <div style="margin-bottom:18px;">
+            <p class="detail-section-title">Latest Reported Symptoms</p>
+            <div id="sum-symptoms">
+              <p style="font-size:13px;color:var(--text-light);">No records found</p>
+            </div>
+          </div>
+
+          <!-- AI Findings -->
+          <div style="margin-bottom:18px;">
+            <p class="detail-section-title">AI Key Findings</p>
+            <ul id="sum-reasons" style="list-style:none;display:flex;flex-direction:column;gap:6px;"></ul>
+          </div>
+
+          <!-- Suggestion -->
+          <div>
+            <p class="detail-section-title">Recommendation</p>
+            <div id="sum-suggestion" style="border-radius:12px;padding:12px 14px;background:var(--pink-50);font-size:13px;color:var(--text-mid);font-weight:500;border:1px solid var(--border);">
+              —
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ Messages Panel ═══ -->
+      <div id="dpanel-messages" class="dtab-panel">
+        <div class="card fade-in-up" style="animation-delay:0.05s;">
+          <p class="detail-section-title">Conversation</p>
+          <div class="chat-container" id="doctor-chat-box">
+            <p style="color:var(--text-light);font-size:13px;text-align:center;">Loading messages…</p>
+          </div>
+          <div class="chat-input-wrap" style="margin-top:12px;">
+            <input type="text" id="doctor-msg-input" class="form-input" placeholder="Type a message to the patient…" onkeydown="if(event.key==='Enter') doctorSendMessage()"/>
+            <button class="btn-pink" style="padding:11px 18px;" onclick="doctorSendMessage()">Send</button>
+          </div>
+        </div>
+      </div><!-- /dpanel-messages -->
+
+    </div><!-- /detail-content -->
+  </div><!-- /right col -->
+</div><!-- /doctor-main-grid -->
+
+<!-- Footer Disclaimer -->
+<footer style="padding: 24px; text-align: center; color: var(--text-light); font-size: 13px;">
+  <p>“This system does not provide medical diagnosis. It assists in early risk detection.”</p>
+</footer>
+
+<!-- Toast -->
+<div id="toast-container" class="toast-container"></div>
+
+<script>
+// ── Config ──
+const API_BASE = 'http://localhost:5000';
+
+// ── State ──
+let currentDoctor   = null;
+let allRequests     = [];
+let selectedRequest = null;
+let activeFilter    = 'all';
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('shecare_user');
+  if (!saved) { window.location.href = 'index.html'; return; }
+
+  currentDoctor = JSON.parse(saved);
+  if (currentDoctor.role !== 'doctor') {
+    window.location.href = 'dashboard.html';
+    return;
+  }
+
+  // Setup navbar
+  const initials = (currentDoctor.name || 'D').charAt(0).toUpperCase();
+  document.getElementById('nav-avatar').textContent = initials;
+  document.getElementById('nav-name').textContent   = currentDoctor.name || currentDoctor.email || 'Doctor';
+
+  loadRequests();
+});
+
+// ── LOAD REQUESTS ──
+async function loadRequests() {
+  const container = document.getElementById('request-list');
+  container.innerHTML = '<p style="color:var(--text-light);font-size:14px;text-align:center;padding:32px 0;">Loading…</p>';
+
+  try {
+    const res  = await fetch(`${API_BASE}/doctor/requests?doctor_id=${currentDoctor.id}`);
+    const data = await res.json();
+    allRequests = Array.isArray(data) ? data : [];
+
+    // Update stats bar
+    document.getElementById('stat-total').textContent    = allRequests.length;
+    document.getElementById('stat-pending').textContent  = allRequests.filter(r => r.status === 'pending').length;
+    document.getElementById('stat-accepted').textContent = allRequests.filter(r => r.status === 'accepted').length;
+    document.getElementById('stat-high').textContent     = '—'; // would need extra query
+
+    renderRequestList();
+  } catch(e) {
+    container.innerHTML = `<p style="color:#dc2626;font-size:13px;text-align:center;padding:24px 0;">Error: ${e.message}</p>`;
+  }
+}
+
+// ── FILTER ──
+function filterRequests(filter) {
+  activeFilter = filter;
+  ['all','pending','accepted','rejected'].forEach(f => {
+    document.getElementById('filter-'+f).classList.toggle('active', f === filter);
+  });
+  renderRequestList();
+}
+
+// ── RENDER REQUEST LIST ──
+function renderRequestList() {
+  const container = document.getElementById('request-list');
+  const filtered  = activeFilter === 'all'
+    ? allRequests
+    : allRequests.filter(r => r.status === activeFilter);
+
+  if (!filtered.length) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:32px 0;">
+        <p style="font-size:32px;margin-bottom:8px;">📭</p>
+        <p style="color:var(--text-light);font-size:14px;">No ${activeFilter === 'all' ? '' : activeFilter} requests found</p>
+      </div>`;
+    return;
+  }
+
+  const statusBadge = {
+    pending:  '<span class="badge status-pending">⏳ Pending</span>',
+    accepted: '<span class="badge status-accepted">✅ Accepted</span>',
+    rejected: '<span class="badge status-rejected">❌ Rejected</span>'
+  };
+
+  container.innerHTML = filtered.map(r => `
+    <div class="request-card ${selectedRequest && selectedRequest.id === r.id ? 'selected' : ''}"
+         id="req-card-${r.id}"
+         onclick="selectRequest('${r.id}')">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="avatar" style="width:38px;height:38px;font-size:15px;flex-shrink:0;">${(r.patient_name||'P').charAt(0).toUpperCase()}</div>
+          <div>
+            <p style="font-size:14px;font-weight:600;color:var(--text-dark);">${r.patient_name || 'Unknown Patient'}</p>
+            <p style="font-size:11px;color:var(--text-light);margin-top:1px;">${r.patient_email || ''}</p>
+            <p style="font-size:11px;color:var(--text-light);margin-top:1px;">
+              ${r.patient_age ? 'Age: ' + r.patient_age : ''}
+              · ${formatDate(r.created_at)}
+            </p>
+          </div>
+        </div>
+        ${statusBadge[r.status] || ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── SELECT REQUEST ──
+async function selectRequest(requestId) {
+  selectedRequest = allRequests.find(r => r.id === requestId);
+  if (!selectedRequest) return;
+
+  // Highlight selected card
+  document.querySelectorAll('.request-card').forEach(c => c.classList.remove('selected'));
+  const card = document.getElementById('req-card-'+requestId);
+  if (card) card.classList.add('selected');
+
+  // Show detail panel
+  document.getElementById('detail-empty').style.display   = 'none';
+  document.getElementById('detail-content').style.display = 'block';
+
+  // Fill header
+  document.getElementById('pt-avatar').textContent = (selectedRequest.patient_name || 'P').charAt(0).toUpperCase();
+  document.getElementById('pt-name').textContent   = selectedRequest.patient_name  || 'Unknown Patient';
+  document.getElementById('pt-email').textContent  = selectedRequest.patient_email || '—';
+  document.getElementById('pt-age').textContent    = selectedRequest.patient_age
+    ? `Age: ${selectedRequest.patient_age} years`
+    : '';
+
+  const statusBadge = { pending:'status-pending', accepted:'status-accepted', rejected:'status-rejected' };
+  const statusLabel = { pending:'⏳ Pending', accepted:'✅ Accepted', rejected:'❌ Rejected' };
+  const badge = document.getElementById('pt-status-badge');
+  badge.className = 'badge ' + (statusBadge[selectedRequest.status] || '');
+  badge.textContent = statusLabel[selectedRequest.status] || selectedRequest.status;
+
+  // Show/hide action buttons
+  const btnWrap = document.getElementById('action-buttons');
+  btnWrap.style.display = selectedRequest.status === 'pending' ? 'flex' : 'none';
+
+  // Switch to Summary tab and load data
+  switchDTab('summary');
+  await loadPatientSummary(selectedRequest.patient_id);
+}
+
+// ── LOAD PATIENT SUMMARY ──
+async function loadPatientSummary(patientId) {
+  // Clear
+  const rLabel = document.getElementById('sum-risk-label');
+  const rBar   = document.getElementById('sum-risk-bar');
+  const rPct   = document.getElementById('sum-risk-pct');
+  const score  = document.getElementById('sum-score');
+  const sym    = document.getElementById('sum-symptoms');
+  const rea    = document.getElementById('sum-reasons');
+  const sugg   = document.getElementById('sum-suggestion');
+
+  rLabel.textContent = 'Loading…';
+  sym.innerHTML = '<p style="font-size:13px;color:var(--text-light);">Fetching patient records…</p>';
+  rea.innerHTML = '';
+
+  try {
+    const res     = await fetch(`${API_BASE}/health/history?user_id=${patientId}`);
+    const records = await res.json();
+
+    if (!records.length) {
+      rLabel.textContent = 'No data';
+      sym.innerHTML = '<p style="font-size:13px;color:var(--text-light);">This patient has not submitted any symptoms yet.</p>';
+      rea.innerHTML = '';
+      sugg.textContent = '—';
+      rBar.style.width = '0%';
+      rPct.textContent = '—';
+      score.textContent = '—';
+      return;
+    }
+
+    // Use the most recent record
+    const rec = records[0];
+    const riskLabels  = { 0: 'Low Risk', 1: 'Moderate Risk', 2: 'High Risk' };
+    const riskColors  = { 0: '#16a34a', 1: '#c94b6a',       2: '#dc2626'    };
+    const riskPercent = { 0: 20,        1: 62,               2: 85           };
+    const riskSugg    = {
+      0: 'Maintain healthy lifestyle — no immediate intervention needed.',
+      1: 'Monitor symptoms closely. A follow-up consultation is recommended within 2–4 weeks.',
+      2: 'Immediate gynecologist consultation recommended. PCOS indicators are significant.'
+    };
+
+    // Risk
+    rLabel.textContent  = riskLabels[rec.risk]  || '—';
+    rLabel.style.color  = riskColors[rec.risk]  || 'var(--pink-600)';
+    score.textContent   = rec.score ?? '—';
+    const pct           = riskPercent[rec.risk] || 0;
+    rPct.textContent    = pct + '%';
+    setTimeout(() => {
+      rBar.style.width       = pct + '%';
+      rBar.style.background  = rec.risk === 0
+        ? 'linear-gradient(90deg,#4ade80,#16a34a)'
+        : rec.risk === 1
+        ? 'linear-gradient(90deg,#f4778a,#c94b6a)'
+        : 'linear-gradient(90deg,#f87171,#dc2626)';
+    }, 80);
+
+    // Symptoms
+    const boolMap = (v) => v === 1 ? '<span class="sym-yes">Yes</span>' : '<span class="sym-no">No</span>';
+    sym.innerHTML = `
+      <div class="sym-row"><span>Cycle Length</span><strong>${rec.cycle_length} days</strong></div>
+      <div class="sym-row"><span>Pain Level</span><strong>${rec.pain_level} / 10</strong></div>
+      <div class="sym-row"><span>Irregular Periods</span>${boolMap(rec.irregular_periods)}</div>
+      <div class="sym-row"><span>Weight Gain</span>${boolMap(rec.weight_gain)}</div>
+      <div class="sym-row"><span>Acne</span>${boolMap(rec.acne)}</div>
+      <div class="sym-row"><span>Excessive Hair Growth</span>${boolMap(rec.hair_growth)}</div>
+      <div class="sym-row"><span>Skin Darkening</span>${boolMap(rec.skin_darkening)}</div>
+      <div class="sym-row"><span>Regular Fast Food</span>${boolMap(rec.fast_food)}</div>
+    `;
+
+    // AI findings with percentages
+    const weights = [];
+    if (rec.cycle_length  > 35) weights.push({ label: 'Irregular cycle', val: 2 });
+    if (rec.pain_level    > 6)  weights.push({ label: 'High pain level', val: 2 });
+    if (rec.weight_gain   === 1) weights.push({ label: 'Weight gain', val: 1 });
+    if (rec.acne          === 1) weights.push({ label: 'Hormonal (Acne)', val: 1 });
+    if (rec.hair_growth   === 1) weights.push({ label: 'Hormonal (Hair)', val: 1 });
+
+    const totalW = weights.reduce((acc, w) => acc + w.val, 0);
+    const rColor = riskColors[rec.risk] || 'var(--pink-600)';
+
+    rea.innerHTML = weights.length
+      ? weights.map(w => {
+          const pct = Math.round((w.val / totalW) * 100);
+          return `<li style="margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-mid);margin-bottom:3px;">
+              <span>${w.label}</span>
+              <span style="font-weight:600;">${pct}%</span>
+            </div>
+            <div style="height:6px;background:#f9d0dc;border-radius:10px;overflow:hidden;">
+              <div style="height:100%;width:${pct}%;background:${rColor};border-radius:10px;"></div>
+            </div>
+          </li>`;
+        }).join('')
+      : '<li style="font-size:13px;color:#16a34a;">✓ No significant risk factors detected</li>';
+
+    // Suggestion
+    sugg.textContent = riskSugg[rec.risk] || '—';
+
+  } catch(e) {
+    sym.innerHTML = `<p style="color:#dc2626;font-size:13px;">Error loading records: ${e.message}</p>`;
+  }
+}
+
+// ── RESPOND TO REQUEST ──
+async function respondRequest(status) {
+  if (!selectedRequest) return;
+  const requestId = selectedRequest.id;
+  const btn = status === 'accepted' ? document.getElementById('btn-accept') : document.getElementById('btn-reject');
+  const originalTxt = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;"></span>';
+
+  try {
+    const res  = await fetch(`${API_BASE}/doctor/respond`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request_id: requestId, status })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      showToast(
+        status === 'accepted'
+          ? `✅ Request accepted — you can now message ${selectedRequest.patient_name}`
+          : `❌ Request rejected`,
+        status === 'accepted' ? 'success' : 'info'
+      );
+
+      // Update local state
+      selectedRequest.status = status;
+      allRequests = allRequests.map(r => r.id === requestId ? { ...r, status } : r);
+
+      // Refresh badge and hide buttons
+      const statusBadge = { pending:'status-pending', accepted:'status-accepted', rejected:'status-rejected' };
+      const statusLabel = { pending:'⏳ Pending', accepted:'✅ Accepted', rejected:'❌ Rejected' };
+      const badge = document.getElementById('pt-status-badge');
+      badge.className   = 'badge ' + statusBadge[status];
+      badge.textContent = statusLabel[status];
+      document.getElementById('action-buttons').style.display = 'none';
+
+      // Update stats bar
+      document.getElementById('stat-pending').textContent  = allRequests.filter(r => r.status === 'pending').length;
+      document.getElementById('stat-accepted').textContent = allRequests.filter(r => r.status === 'accepted').length;
+
+      renderRequestList();
+
+      // Auto open messages for accepted
+      if (status === 'accepted') {
+        setTimeout(() => switchDTab('messages'), 600);
+      }
+    } else {
+      showToast(data.error || 'Failed to update request', 'error');
+    }
+  } catch(e) {
+    showToast('Network error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalTxt;
+  }
+}
+
+// ── SWITCH DETAIL TAB ──
+function switchDTab(tab) {
+  ['summary','messages'].forEach(t => {
+    document.getElementById('dpanel-'+t).classList.remove('active');
+    document.getElementById('dtab-'+t).classList.remove('active');
+  });
+  document.getElementById('dpanel-'+tab).classList.add('active');
+  document.getElementById('dtab-'+tab).classList.add('active');
+  if (tab === 'messages' && selectedRequest) loadDoctorMessages();
+}
+
+// ── LOAD MESSAGES (doctor side) ──
+async function loadDoctorMessages() {
+  if (!selectedRequest) return;
+  const chatBox = document.getElementById('doctor-chat-box');
+  chatBox.innerHTML = '<p style="color:var(--text-light);font-size:13px;text-align:center;">Loading…</p>';
+
+  try {
+    const res  = await fetch(`${API_BASE}/messages?user1=${currentDoctor.id}&user2=${selectedRequest.patient_id}`);
+    const msgs = await res.json();
+
+    if (!msgs.length) {
+      chatBox.innerHTML = '<p style="color:var(--text-light);font-size:13px;text-align:center;">No messages yet. Start the conversation!</p>';
+      return;
+    }
+
+    chatBox.innerHTML = msgs.map(m => {
+      const isSent = m.sender_id === currentDoctor.id;
+      const time   = new Date(m.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      return `
+        <div style="display:flex;flex-direction:column;align-items:${isSent ? 'flex-end' : 'flex-start'};">
+          <div class="${isSent ? 'msg-sent' : 'msg-received'}">${m.content}</div>
+          <div class="msg-time">${time}</div>
+        </div>`;
+    }).join('');
+
+    chatBox.scrollTop = chatBox.scrollHeight;
+  } catch(e) {
+    chatBox.innerHTML = `<p style="color:#dc2626;font-size:13px;text-align:center;">Error: ${e.message}</p>`;
+  }
+}
+
+// ── SEND MESSAGE (doctor) ──
+async function doctorSendMessage() {
+  if (!selectedRequest) return;
+  const content = document.getElementById('doctor-msg-input').value.trim();
+  if (!content) { showToast('Message cannot be empty', 'error'); return; }
+
+  try {
+    const res  = await fetch(`${API_BASE}/messages/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sender_id:   currentDoctor.id,
+        receiver_id: selectedRequest.patient_id,
+        content
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('doctor-msg-input').value = '';
+      await loadDoctorMessages();
+    } else {
+      showToast(data.error || 'Failed to send', 'error');
+    }
+  } catch(e) {
+    showToast('Network error: ' + e.message, 'error');
+  }
+}
+
+// ── LOGOUT ──
+function logout() {
+  localStorage.removeItem('shecare_user');
+  window.location.href = 'index.html';
+}
+
+// ── HELPERS ──
+function formatDate(iso) {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch { return iso; }
+}
+
+function showToast(msg, type) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type || 'info'}`;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-10px)';
+    toast.style.transition = 'all 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 3200);
+}
+</script>
+</body>
+</html>

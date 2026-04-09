@@ -1,0 +1,123 @@
+# ─────────────────────────────────────────
+# SheCare AI — .gitignore
+# ─────────────────────────────────────────
+
+# ── Environment / Secrets (NEVER commit) ──
+.env
+.env.local
+.env.production
+.env.development
+.env.*.local
+*.env
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+ENV/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+*.so
+.mypy_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# ── Node / JS ──
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.npm
+.yarn/
+package-lock.json
+
+# ── Build / Output ──
+build/
+dist/
+out/
+.next/
+.nuxt/
+.cache/
+
+# ── OS Files ──
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ── IDE / Editor ──
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# ── Logs ──
+*.log
+logs/
+
+# ── Agent / AI tool directories ──
+.agent/
+.agents/
+.claude/
+.claude-plugin/
+.codex/
+.cursor/
+.gemini/
+.gsd/
+.kiro/
+.opencode/
+
+# ── Framework / tooling folders (not part of SheCare AI) ──
+gsd-template/
+skill-creator/
+adapters/
+agents/
+commands/
+contexts/
+hooks/
+mcp-configs/
+plugins/
+rules/
+skills/
+tests/
+node_modules/
+assets/
+.github/
+
+# ── ML model (large binary, optional) ──
+# Uncomment below if you don't want to push the model
+# backend/model.pkl
+
+# ── Temp / generated files ──
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig
+shecare_report_*.pdf

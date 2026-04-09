@@ -1,0 +1,8 @@
+flask
+flask-cors
+python-dotenv
+joblib
+numpy
+fpdf2
+requests
+scikit-learn
