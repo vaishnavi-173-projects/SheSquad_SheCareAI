@@ -1,79 +1,122 @@
-# SheCare AI – Reproductive Health Assistant
+# 🌸 SheCare AI — Smart Reproductive Health Assistant
 
-SheCare AI is a comprehensive, full-stack predictive healthcare application designed to assess the risk of Polycystic Ovary Syndrome (PCOS) and other related reproductive health disorders. It combines a dynamic and visually rich user interface with robust machine-learning-backed prediction capabilities to equip patients with actionable insights, whilst facilitating seamless connections with healthcare providers.
-
-## Features ✨
-
-### 👩 For Patients:
-- **Instant Health Analysis:** Enter symptoms and cycle details to receive a risk assessment score (Low, Moderate, High).
-- **Hybrid AI Model:** Uses both clinical rules and an ML Model (`sklearn` Gradient Boosting Classifier) for robust predictions.
-- **Detailed PDF Reports:** Download your symptom history and predictive risk securely as a PDF report.
-- **Doctor Consultation:** Ask for reviews and expert second opinions by messaging doctors on the platform.
-
-### 🩺 For Doctors:
-- **Centralized Dashboard:** Manage accepted and pending patient requests.
-- **View Patient Records:** See an in-depth view of a patient’s historical records and specific PCOS symptoms.
-- **Secure Messaging:** Discuss symptoms or recommend tests with your patients.
-- **Generate Diagnoses:** Accept or reject appointments to prioritize urgent patients.
-
-## Technology Stack 💻
-
-- **Frontend:** HTML5, CSS3 (Vanilla + Tailwind-like custom variables framework), Vanilla JavaScript 
-- **Backend:** Python, Flask, Flask-CORS 
-- **Database:** Supabase (PostgreSQL) REST APIs
-- **Machine Learning:** `scikit-learn` for generating predictive risk models
-- **PDF Generation:** `fpdf2` 
-
-## Project Structure 📁
-
-```text
-shecares/
-├── backend/
-│   ├── .env                 # Environment variables (Supabase URL/Key)
-│   ├── app.py               # Main Flask application and REST endpoints
-│   ├── train_model.py       # ML Model generation script
-│   ├── requirements.txt     # Python dependencies
-│   └── model.pkl            # Pre-compiled ML gradient boosting model
-└── frontend/
-    ├── index.html           # Landing & Authentication Page
-    ├── dashboard.html       # Patient Portal
-    ├── doctor.html          # Healthcare Provider Portal
-    └── styles.css           # Global custom styles and theming
-```
-
-## Setup & Running the Application 🚀
-
-### 1. Configure the Database
-The application relies on Supabase. To utilize this:
-1. Create a project on [Supabase](https://supabase.com).
-2. Grab your `SUPABASE_URL` and `SUPABASE_KEY` (Anon/Public key).
-3. Insert them into `backend/.env`.
-4. Create the required tables in Supabase (or use the REST endpoint auto-generation if configuring locally). You will need these tables:
-   - `users`, `health_records`, `requests`, `messages`
-
-### 2. Setup the Backend
-Navigate to the `backend/` directory:
-```bash
-cd backend
-pip install -r requirements.txt
-python train_model.py  # (Optional) Generate the model.pkl
-python app.py
-```
-*The backend will boot up at http://localhost:5000*
-
-### 3. Setup the Frontend
-Since the frontend uses standard HTML/JS, simply serve the directory or run it using a local live server.
-```bash
-# E.g. using python
-cd frontend
-python -m http.server 3000
-```
-*Open your browser and navigate to http://localhost:3000/index.html*
+> AI-powered system for early detection of PCOS & Endometriosis with doctor integration and real-time communication.
 
 ---
 
-## 🎨 Design System
-SheCare AI uses a meticulously crafted **Pink/Purple design terminology** focusing on an elegant, soothing, and trustworthy visual aura (inspired by `Glassmorphism` interactions and micro-animations).
+## 🚀 Key Features
 
-## 🔒 Privacy & Safety
-The predictions generated are exclusively for **informational purposes**. SheCare natively prompts users categorized as "High-Risk" to consult with an onboarded specialist prior to accepting absolute prognosis.
+- 🧠 **Explainable AI Risk Detection**: Transparent analysis of health factors.
+- 📊 **Symptom Tracking**: Easy-to-use interface for monitoring reproductive health.
+- 📄 **PDF Report Generation**: Professional AI-generated narratives combined with clinical logic.
+- 👩‍⚕️ **Doctor Recommendation**: Direct connection to registered specialists.
+- 🔗 **Consultation Pipeline**: Secure request-approve workflow for patients and doctors.
+- 💬 **Real-Time Chat**: Web-socket based messaging with resilient polling fallbacks.
+- 🔐 **Secure Data**: Industry-standard isolation using Supabase Row Level Security (RLS).
+- 🧪 **E2E Testing**: Comprehensive automation suite using Playwright.
+
+---
+
+## 🧠 System Architecture
+
+```text
+[Frontend UI (HTML/JS)]
+        ↓
+[Flask Backend API]
+        ↓
+[Supabase DB + Auth + Storage]
+        ↓
+[Gemini AI (optional)]
+```
+
+### ⚙️ Workflow
+1. **Login** → 2. **Track Symptoms** → 3. **AI Prediction** → 4. **Generate PDF** → 5. **Consult Doctor** → 6. **Live Chat**
+
+---
+
+## 🧰 Tech Stack
+
+- **Frontend**: HTML5, Vanilla CSS3, JavaScript (ES6+)
+- **Backend**: Python (Flask)
+- **Database**: Supabase (PostgreSQL)
+- **AI/LLM**: Google Gemini 1.5 Flash (Narratives) + Scikit-learn (Risk Logic)
+- **Storage**: Supabase Storage (PDF Bucket)
+- **Realtime**: Supabase Realtime (WebSockets)
+- **Testing**: Playwright (End-to-End Automation)
+
+---
+
+## 📁 Project Structure
+
+```text
+SheCareAI/
+├── frontend/        # Web Interface (HTML/CSS/JS)
+├── backend/         # Flask API & ML Logic
+├── tests/           # Playwright E2E Test Suite
+├── .gitignore       # Production exclusion rules
+└── README.md        # Project Documentation
+```
+
+---
+
+## ⚙️ Setup Instructions
+
+### 1️⃣ Clone Repository
+```bash
+git clone https://github.com/vaishnavi-173-projects/SheSquad_SheCareAI.git
+cd SheSquad_SheCareAI
+```
+
+### 2️⃣ Setup Environment-Variables
+Create a `.env` file in the `backend/` directory:
+```env
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_key
+GEMINI_API_KEY=your_key
+```
+
+### 3️⃣ Install & Run Backend
+```bash
+cd backend
+pip install -r requirements.txt
+python app.py
+```
+👉 API runs on: `http://localhost:5000`
+
+### 4️⃣ Launch Frontend
+Serve the `frontend/` directory using **Live Server** or any static host.
+👉 UI runs on: `http://localhost:5500`
+
+---
+
+## 🧪 Run Automation Tests
+```bash
+npm install
+npx playwright install chrome
+npx playwright test tests/e2e/shecare_demo.spec.js --headed
+```
+
+---
+
+## 🔐 Security & Compliance
+- **RLS (Row Level Security)**: Patient data is strictly isolated; doctors can only see data for accepted consultations.
+- **Credential Hygiene**: Zero local secrets; all sensitive keys are managed via environment variables.
+- **Privacy**: No diagnostic claims made; focusing on communication and risk awareness.
+
+---
+
+## ⚠️ Disclaimer
+**This system does NOT provide medical diagnosis.** It is designed for early risk detection and to facilitate efficient communication between patients and licensed medical professionals.
+
+---
+
+## 👩‍💻 Team
+- **Vaishnavi V**
+- **Sakshi Rajendra Kamble**
+- **Saraswati Kulkarni**
+- **Ramya B**
+
+---
+
+## 🌟 Project Impact
+SheCare AI empowers women by reducing the time between symptom onset and clinical consultation, transforming unstructured health data into actionable medical insights.
