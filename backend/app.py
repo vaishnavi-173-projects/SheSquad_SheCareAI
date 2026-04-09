@@ -10,6 +10,7 @@ import numpy as np
 from datetime import datetime
 from fpdf import FPDF
 import tempfile
+import google.generativeai as genai
 
 load_dotenv()
 
@@ -36,12 +37,64 @@ if os.path.exists(MODEL_PATH):
     except Exception as e:
         print(f"Could not load model.pkl: {e}")
 else:
-    print("model.pkl not found — using rule-based scoring only.")
+    print("model.pkl not found -- using rule-based scoring only.")
+
+# Gemini AI setup
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+gemini_model = None
+if GEMINI_KEY:
+    try:
+        genai.configure(api_key=GEMINI_KEY)
+        gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+        print("Gemini AI model ready.")
+    except Exception as e:
+        print(f"Gemini init failed: {e}")
 
 
 # ─────────────────────────────────────────────
 # HELPER FUNCTIONS
 # ─────────────────────────────────────────────
+
+def ascii_safe(text):
+    """Remove non-Latin characters that Helvetica cannot render (e.g. em-dashes)."""
+    return ''.join(c if ord(c) < 256 else '-' for c in str(text))
+
+
+def generate_ai_explanation(name, age, risk_label, score, reasons, symptoms):
+    """
+    Call Gemini to produce a short clinical-style narrative for the PDF report.
+    Falls back gracefully if API unavailable.
+    """
+    if not gemini_model:
+        return None
+    try:
+        sym_list = []
+        if symptoms.get("irregular_periods"): sym_list.append("irregular menstrual cycles")
+        if symptoms.get("pain_level", 0) > 6:  sym_list.append(f"pelvic pain rated {symptoms.get('pain_level')}/10")
+        if symptoms.get("weight_gain"):         sym_list.append("unexplained weight gain")
+        if symptoms.get("acne"):                sym_list.append("hormonal acne")
+        if symptoms.get("hair_growth"):         sym_list.append("excessive hair growth")
+        if symptoms.get("skin_darkening"):      sym_list.append("skin darkening")
+        if symptoms.get("fast_food"):           sym_list.append("frequent fast food consumption")
+        cycle = symptoms.get("cycle_length", 28)
+
+        prompt = (
+            f"You are a clinical assistant writing a brief, empathetic, non-alarmist health report section."
+            f" Patient: {name}, Age: {age}."
+            f" PCOS risk assessment result: {risk_label} (rule score {score}/13)."
+            f" Reported symptoms: {', '.join(sym_list) if sym_list else 'none significant'}."
+            f" Menstrual cycle length: {cycle} days."
+            f" In 3-4 short sentences (plain English, no markdown, no bullet points, no em-dashes),"
+            f" explain what these findings suggest, why early action matters, and one lifestyle tip."
+            f" Keep it under 80 words."
+        )
+        response = gemini_model.generate_content(prompt)
+        raw = response.text.strip()
+        return ascii_safe(raw)
+    except Exception as e:
+        print(f"[Gemini] Explanation failed: {e}")
+        return None
+
 
 def supabase_get(table, params=None):
     """GET rows from a Supabase table."""
@@ -576,13 +629,13 @@ def generate_report():
     try:
         data       = request.json
         user_id    = data.get("user_id", "user")
-        name       = data.get("name", "Patient")
-        age        = data.get("age", "N/A")
+        name       = ascii_safe(data.get("name", "Patient"))
+        age        = ascii_safe(data.get("age", "N/A"))
         risk       = int(data.get("risk", 0))
         score      = data.get("score", 0)
         reasons    = data.get("reasons", [])
         explanation= data.get("explanation", [])
-        suggestion = data.get("suggestion", "Maintain healthy lifestyle")
+        suggestion = ascii_safe(data.get("suggestion", "Maintain healthy lifestyle"))
         symptoms   = data.get("symptoms", {})
 
         risk_labels      = {0: "Low Risk", 1: "Moderate Risk", 2: "High Risk"}
@@ -661,26 +714,39 @@ def generate_report():
         if explanation:
             pdf.ln(5)
             pdf.set_font("Helvetica", "B", 13)
-            pdf.cell(0, 8, "AI Explainability — Factor Contributions", new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(0, 8, "AI Explainability - Factor Contributions", new_x="LMARGIN", new_y="NEXT")
             pdf.set_font("Helvetica", "", 11)
             for item in explanation:
-                pdf.cell(0, 7, f"  • {item.get('factor', '')}: {item.get('contribution', 0)}%", new_x="LMARGIN", new_y="NEXT")
+                pdf.cell(0, 7, ascii_safe(f"  * {item.get('factor', '')}: {item.get('contribution', 0)}%"), new_x="LMARGIN", new_y="NEXT")
 
         # AI Findings
         pdf.ln(5)
         pdf.set_font("Helvetica", "B", 13)
-        pdf.cell(0, 8, "AI Analysis — Key Findings", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 8, "AI Analysis - Key Findings", new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", "", 11)
         if reasons:
             for reason in reasons:
-                pdf.cell(0, 7, f"  \u2022  {reason}", new_x="LMARGIN", new_y="NEXT")
+                pdf.cell(0, 7, ascii_safe(f"  * {reason}"), new_x="LMARGIN", new_y="NEXT")
         else:
             pdf.cell(0, 7, "  No significant risk factors detected.", new_x="LMARGIN", new_y="NEXT")
+
+        # Gemini AI Narrative (new section)
+        ai_narrative = generate_ai_explanation(name, age, risk_label, score, reasons, symptoms)
+        if ai_narrative:
+            pdf.ln(5)
+            pdf.set_fill_color(255, 248, 250)
+            pdf.rect(10, pdf.get_y(), 190, 1, "F")
+            pdf.ln(2)
+            pdf.set_font("Helvetica", "B", 13)
+            pdf.cell(0, 8, "AI Clinical Narrative (Powered by Gemini)", new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Helvetica", "", 11)
+            pdf.set_text_color(59, 26, 46)
+            pdf.multi_cell(0, 7, f"  {ai_narrative}")
 
         # Recommendation
         pdf.ln(5)
         pdf.set_font("Helvetica", "B", 13)
-        pdf.cell(0, 8, "Doctor's Recommendation", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 8, "Recommendation", new_x="LMARGIN", new_y="NEXT")
         pdf.set_font("Helvetica", "", 11)
         pdf.multi_cell(0, 7, f"  {suggestion}")
 
@@ -711,22 +777,14 @@ def generate_report():
         path     = os.path.join(tmp_dir, filename)
         pdf.output(path)
 
-        # ── Upload to Supabase Storage ──
+        # ── Upload to Supabase Storage (optional) ──
         pdf_url = None
         if not str(user_id).startswith("demo-") and SUPABASE_KEY and "your_supabase" not in str(SUPABASE_KEY):
-            storage_path = f"{user_id}/{filename}"
-            pdf_url = upload_to_supabase_storage(path, "reports", storage_path)
-
-            # Store report record in DB
-            if pdf_url:
-                report_record = {
-                    "user_id":    user_id,
-                    "risk_level": risk_label,
-                    "risk_score": score,
-                    "summary":    suggestion,
-                    "pdf_url":    pdf_url
-                }
-                supabase_post("reports", report_record)
+            try:
+                storage_path = f"{user_id}/{filename}"
+                pdf_url = upload_to_supabase_storage(path, "reports", storage_path)
+            except Exception as se:
+                print(f"[Storage] Upload failed (bucket may not exist): {se}")
 
         safe_name = name.replace(" ", "_")
         response  = send_file(

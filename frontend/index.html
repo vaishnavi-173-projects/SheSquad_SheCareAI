@@ -204,7 +204,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (saved) {
     try {
       const u = JSON.parse(saved);
-      if (u.role === 'doctor') window.location.href = 'doctor.html';
+      if (u.role === 'doctor') window.location.href = 'doctor_dashboard.html';
       else                     window.location.href = 'dashboard.html';
     } catch(e) { localStorage.removeItem('shecare_user'); }
   }
@@ -219,7 +219,7 @@ async function redirectByRole(authUser) {
   if (sb) {
     try {
       const { data } = await sb.from('users').select('role').eq('id', authUser.id).single();
-      if (data?.role === 'doctor') { window.location.href = 'doctor.html'; return; }
+      if (data?.role === 'doctor') { window.location.href = 'doctor_dashboard.html'; return; }
     } catch(e) {}
   }
   window.location.href = 'dashboard.html';
@@ -329,7 +329,7 @@ function loginAsDoctor() {
   };
   localStorage.setItem('shecare_user', JSON.stringify(doctorUser));
   showToast('🩺 Logging in as Doctor…', 'success');
-  setTimeout(() => window.location.href = 'doctor.html', 700);
+  setTimeout(() => window.location.href = 'doctor_dashboard.html', 700);
 }
 
 // ── DEMO FALLBACK (no Supabase key) ──
@@ -341,7 +341,7 @@ function demoLogin(name, email, age, role) {
   localStorage.setItem('shecare_user', JSON.stringify(user));
   showToast('🌸 Welcome (Demo Mode)!', 'success');
   setTimeout(() => {
-    window.location.href = role === 'doctor' ? 'doctor.html' : 'dashboard.html';
+    window.location.href = role === 'doctor' ? 'doctor_dashboard.html' : 'dashboard.html';
   }, 700);
 }
 

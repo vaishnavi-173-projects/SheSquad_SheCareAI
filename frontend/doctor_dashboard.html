@@ -259,6 +259,9 @@
             <div id="sum-suggestion" style="border-radius:12px;padding:12px 14px;background:var(--pink-50);font-size:13px;color:var(--text-mid);font-weight:500;border:1px solid var(--border);">
               —
             </div>
+            <div id="sum-report-action" style="margin-top:14px;display:none;">
+               <a id="btn-view-report" href="#" target="_blank" class="btn-outline-pink" style="display:inline-block;padding:8px 16px;font-size:12px;text-decoration:none;">📄 View Official AI Report</a>
+            </div>
           </div>
         </div>
       </div>
@@ -357,6 +360,7 @@ function initUI() {
 // ── LOAD REQUESTS ──
 async function loadRequests() {
   const container = document.getElementById('request-list');
+  container.innerHTML = '<div style="text-align:center;padding:32px 0;"><span class="spinner" style="border-top-color:var(--pink-600);width:24px;height:24px;"></span></div>';
 
   try {
     if (!currentDoctor.isDemo) {
@@ -406,9 +410,10 @@ function renderRequestList() {
 
   if (!filtered.length) {
     container.innerHTML = `
-      <div style="text-align:center;padding:32px 0;">
-        <p style="font-size:32px;margin-bottom:8px;">📭</p>
-        <p style="color:var(--text-light);font-size:14px;">No ${activeFilter === 'all' ? '' : activeFilter} requests found</p>
+      <div style="text-align:center;padding:48px 24px;">
+        <div style="font-size:48px;margin-bottom:12px;opacity:0.5;">📭</div>
+        <p style="color:var(--text-dark);font-size:15px;font-weight:600;">No ${activeFilter === 'all' ? '' : activeFilter} requests found</p>
+        <p style="color:var(--text-light);font-size:13px;margin-top:4px;">When patients select you for a consultation, they'll appear here.</p>
       </div>`;
     return;
   }
@@ -490,7 +495,7 @@ async function loadPatientSummary(patientId) {
   const sugg   = document.getElementById('sum-suggestion');
 
   rLabel.textContent = 'Loading…';
-  sym.innerHTML = '<p style="font-size:13px;color:var(--text-light);">Fetching patient records…</p>';
+  sym.innerHTML = '<div style="text-align:center;padding:24px 0;"><span class="spinner" style="border-top-color:var(--pink-600);width:24px;height:24px;"></span><p style="font-size:13px;color:var(--text-light);margin-top:8px;">Fetching patient records…</p></div>';
   rea.innerHTML = '';
 
   try {
@@ -576,6 +581,22 @@ async function loadPatientSummary(patientId) {
     // Suggestion
     sugg.textContent = riskSugg[rec.risk] || '—';
 
+    // Report Integration for Doctor
+    const reportAction = document.getElementById('sum-report-action');
+    const btnReport = document.getElementById('btn-view-report');
+    reportAction.style.display = 'none';
+
+    if (!currentDoctor.isDemo) {
+      try {
+        // Find if this patient generated any PDF reports and grab the most recent URL (via getReports in db.js)
+        const reportsList = await getReports(patientId);
+        if (reportsList && reportsList.length > 0 && reportsList[0].pdf_url) {
+          btnReport.href = reportsList[0].pdf_url;
+          reportAction.style.display = 'block';
+        }
+      } catch(e) { console.warn("Could not fetch reports: ", e); }
+    }
+
   } catch(e) {
     sym.innerHTML = `<p style="color:#dc2626;font-size:13px;">Error loading records: ${e.message}</p>`;
   }
@@ -630,6 +651,8 @@ async function respondRequest(status) {
   }
 }
 
+let chatFallbackInterval = null;
+
 // ── SWITCH DETAIL TAB ──
 function switchDTab(tab) {
   ['summary','messages'].forEach(t => {
@@ -641,18 +664,32 @@ function switchDTab(tab) {
 
   if (tab === 'messages' && selectedRequest) {
     if (activeChannel) activeChannel.unsubscribe();
+    if (chatFallbackInterval) clearInterval(chatFallbackInterval);
+
     loadDoctorMessages();
     if (!currentDoctor.isDemo) {
       activeChannel = subscribeToMessages(selectedRequest.id, (m) => doctorAppendMsg(m, currentDoctor.id));
+      
+      // FALLBACK: CRITICAL DEMO POLL (Poll every 2.5sec if sockets hang)
+      chatFallbackInterval = setInterval(() => {
+        const fetchLen = document.getElementById('doctor-chat-box').children.length;
+        getMessages(selectedRequest.id).then(msgs => {
+           if (msgs.length > fetchLen) loadDoctorMessages(true); // reload silently
+        }).catch(e => console.warn(e));
+      }, 2500);
     }
+  } else {
+    if (chatFallbackInterval) clearInterval(chatFallbackInterval);
   }
 }
 
 // ── LOAD MESSAGES (doctor side) ──
-async function loadDoctorMessages() {
+async function loadDoctorMessages(silent = false) {
   if (!selectedRequest) return;
   const chatBox = document.getElementById('doctor-chat-box');
-  chatBox.innerHTML = '<p style="color:var(--text-light);font-size:13px;text-align:center;">Loading…</p>';
+  if (!silent) {
+    chatBox.innerHTML = '<div style="text-align:center;padding:24px 0;"><span class="spinner" style="border-top-color:var(--pink-600);width:20px;height:20px;"></span></div>';
+  }
 
   try {
     let msgs = [];
@@ -664,25 +701,32 @@ async function loadDoctorMessages() {
     }
 
     if (!msgs.length) {
-      chatBox.innerHTML = '<p style="color:var(--text-light);font-size:13px;text-align:center;">No messages yet. Start the conversation!</p>';
+      chatBox.innerHTML = `
+        <div style="text-align:center;padding:24px 0;">
+          <p style="font-size:32px;margin-bottom:8px;">💬</p>
+          <p style="color:var(--text-light);font-size:14px;font-weight:500;">Start conversation</p>
+          <p style="color:var(--border);font-size:12px;margin-top:2px;">Help your patient by offering expert advice.</p>
+        </div>
+      `;
       return;
     }
     chatBox.innerHTML = '';
     msgs.forEach(m => doctorAppendMsg(m, currentDoctor.id));
-    chatBox.scrollTop = chatBox.scrollHeight;
+    if (!silent) chatBox.scrollTop = chatBox.scrollHeight;
   } catch(e) {
-    chatBox.innerHTML = `<p style="color:#dc2626;font-size:13px;text-align:center;">Error: ${e.message}</p>`;
+    chatBox.innerHTML = `<div style="text-align:center;padding:16px;color:#dc2626;font-size:13px;">❌ Error: ${e.message}</div>`;
   }
 }
 
 function doctorAppendMsg(m, myId) {
   const chatBox = document.getElementById('doctor-chat-box');
-  const isSent  = m.sender_id === myId;
+  const isDoctor  = m.sender_id === myId;
+  const isPatient = !isDoctor;
   const time    = new Date(m.created_at).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
   const div     = document.createElement('div');
-  div.style.cssText = `display:flex;flex-direction:column;align-items:${isSent ? 'flex-end' : 'flex-start'};`;
+  div.style.cssText = `display:flex;flex-direction:column;align-items:${isPatient ? 'flex-end' : 'flex-start'};`;
   div.innerHTML = `
-    <div class="${isSent ? 'msg-sent' : 'msg-received'}">${m.content}</div>
+    <div class="${isPatient ? 'msg-pink' : 'msg-purple'}">${m.content}</div>
     <div class="msg-time">${time}</div>
   `;
   chatBox.appendChild(div);
@@ -695,6 +739,11 @@ async function doctorSendMessage() {
   const content = document.getElementById('doctor-msg-input').value.trim();
   if (!content) { showToast('Message cannot be empty', 'error'); return; }
 
+  const btnSend = document.querySelector('#dpanel-messages .btn-pink');
+  const ogNode = btnSend.innerHTML;
+  btnSend.disabled = true;
+  btnSend.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;margin-right:0px;"></span>';
+
   try {
     if (!currentDoctor.isDemo) {
       await sendMessage(selectedRequest.id, currentDoctor.id, content);
@@ -706,11 +755,14 @@ async function doctorSendMessage() {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      await loadDoctorMessages();
+      await loadDoctorMessages(true);
     }
     document.getElementById('doctor-msg-input').value = '';
   } catch(e) {
     showToast('Error: ' + e.message, 'error');
+  } finally {
+    btnSend.disabled = false;
+    btnSend.innerHTML = ogNode;
   }
 }
 

@@ -329,3 +329,27 @@ CREATE POLICY "Authenticated users can upload reports"
 CREATE POLICY "Public can read report PDFs"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'reports');
+
+ - -   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+ - -   S T O R A G E   B U C K E T   &   P O L I C I E S   ( " r e p o r t s "   b u c k e t ) 
+ - -   - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
+ 
+ - -   C r e a t e   a   n e w   p u b l i c   b u c k e t   ( N O T E :   E x e c u t i n g   t h i s   d i r e c t l y   r e q u i r e s   P o s t g r e s   S u p e r u s e r   i n   s o m e   r e s t r i c t e d   S u p a b a s e   i n s t a n c e s .   U s u a l l y ,   i t ' s   e a s i e r   t o   c r e a t e   t h e   b u c k e t   v i a   t h e   U I .   I f   e x e c u t i n g   v i a   S Q L   E d i t o r   w o r k s ,   r u n   i t : ) 
+ I N S E R T   I N T O   s t o r a g e . b u c k e t s   ( i d ,   n a m e ,   p u b l i c )   
+ V A L U E S   ( ' r e p o r t s ' ,   ' r e p o r t s ' ,   t r u e ) 
+ O N   C O N F L I C T   ( i d )   D O   N O T H I N G ; 
+ 
+ - -   P o l i c y   1 :   P u b l i c   R e a d   A c c e s s   ( A n y o n e   c a n   v i e w   g e n e r a t e d   P D F   r e p o r t s ) 
+ C R E A T E   P O L I C Y   " P u b l i c   r e a d   a c c e s s " 
+ O N   s t o r a g e . o b j e c t s 
+ F O R   S E L E C T 
+ U S I N G   ( b u c k e t _ i d   =   ' r e p o r t s ' ) ; 
+ 
+ - -   P o l i c y   2 :   A u t h e n t i c a t e d   U p l o a d   ( O n l y   l o g g e d - i n   u s e r s   c a n   u p l o a d   t o   t h e   b u c k e t ) 
+ C R E A T E   P O L I C Y   " A u t h e n t i c a t e d   u p l o a d " 
+ O N   s t o r a g e . o b j e c t s 
+ F O R   I N S E R T 
+ W I T H   C H E C K   ( a u t h . u i d ( )   I S   N O T   N U L L   A N D   b u c k e t _ i d   =   ' r e p o r t s ' ) ; 
+ 
+ 
+ 

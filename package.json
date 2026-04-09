@@ -1,0 +1,12 @@
+{
+  "name": "shecare-ai-tests",
+  "version": "1.0.0",
+  "description": "E2E tests for SheCare AI using Playwright",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}

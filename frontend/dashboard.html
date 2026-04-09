@@ -197,8 +197,8 @@
           <p style="color:var(--text-light);font-size:13px;text-align:center;">Select a doctor to start chatting</p>
         </div>
         <div class="chat-input-wrap">
-          <input type="text" id="msg-input" class="form-input" placeholder="Type a message…" onkeydown="if(event.key==='Enter')sendMessage()"/>
-          <button class="btn-pink" style="padding:11px 18px;" onclick="sendMessage()">Send</button>
+          <input type="text" id="msg-input" class="form-input" placeholder="Type a message…" onkeydown="if(event.key==='Enter')handleSendMessage()"/>
+          <button class="btn-pink" style="padding:11px 18px;" onclick="handleSendMessage()">Send</button>
         </div>
       </div>
     </div>
@@ -272,8 +272,8 @@
 
         <!-- Report + Appointment buttons -->
         <div style="display:flex;flex-direction:column;gap:10px;">
-          <button class="btn-pink w-full" style="justify-content:center;" onclick="downloadReport()">
-            📄 Download PDF Report
+          <button id="btn-report" class="btn-pink w-full" style="justify-content:center;" onclick="downloadReport()">
+            <span id="btn-report-txt">📄 Download PDF Report</span>
           </button>
           <button class="btn-outline-pink w-full" style="justify-content:center;" onclick="switchTab('doctors')">
             🏥 Book Appointment
@@ -348,7 +348,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!saved) { window.location.href = 'index.html'; return; }
   try {
     currentUser = JSON.parse(saved);
-    if (currentUser.role === 'doctor') { window.location.href = 'doctor.html'; return; }
+    if (currentUser.role === 'doctor') { window.location.href = 'doctor_dashboard.html'; return; }
     initUI();
   } catch(e) {
     localStorage.removeItem('shecare_user');
@@ -592,6 +592,11 @@ function renderResult(data) {
 async function downloadReport() {
   if (!lastResult) { showToast('Please run an analysis first', 'error'); return; }
 
+  const btn = document.getElementById('btn-report');
+  const txt = document.getElementById('btn-report-txt');
+  if (btn) btn.disabled = true;
+  if (txt) txt.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;margin-right:6px;"></span> Generating...';
+
   const payload = {
     user_id:    currentUser.id,
     name:       currentUser.name || 'Patient',
@@ -619,23 +624,46 @@ async function downloadReport() {
       body: JSON.stringify(payload)
     });
     if (!res.ok) throw new Error('Report generation failed');
+    
     const blob = await res.blob();
+    
+    // 1. Upload to Supabase Storage Bucket natively via the frontend
+    let pdfUrl = null;
+    if (!currentUser.isDemo) {
+      pdfUrl = await uploadPDF(blob, currentUser.id);
+    }
+    
+    // 2. Save report metadata and URL into the 'reports' Database table
+    if (!currentUser.isDemo) {
+      await saveReport(currentUser.id, {
+        risk_level: lastResult.risk_label,
+        risk_score: lastResult.score,
+        summary:    lastResult.suggestion,
+        pdf_url:    pdfUrl || null
+      });
+    }
+
+    // 3. Initiate browser download for the user
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href     = url;
     a.download = `shecare_report_${currentUser.name || 'patient'}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('Report downloaded!', 'success');
+    showToast('Report generated & saved!', 'success');
   } catch(e) {
     showToast('Report error: ' + e.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+    if (txt) txt.innerHTML = '📄 Download PDF Report';
   }
 }
 
 // ── LOAD HISTORY via db.js ──
 async function loadHistory() {
   const container = document.getElementById('history-list');
-  container.innerHTML = '<p style="color:var(--text-light);font-size:14px;text-align:center;padding:20px 0;">Loading…</p>';
+  // Spinner loading state
+  container.innerHTML = '<div style="text-align:center;padding:32px 0;"><span class="spinner" style="border-top-color:var(--pink-600);width:24px;height:24px;"></span></div>';
 
   try {
     // Try db.js first, fall back to Flask API
@@ -649,7 +677,12 @@ async function loadHistory() {
     }
 
     if (!data || !data.length) {
-      container.innerHTML = '<p style="color:var(--text-light);font-size:14px;text-align:center;padding:24px 0;">No records yet. Submit symptoms to start tracking!</p>';
+      container.innerHTML = `
+        <div style="text-align:center;padding:40px 24px;">
+          <div style="font-size:48px;margin-bottom:12px;opacity:0.5;">📈</div>
+          <p style="color:var(--text-dark);font-size:15px;font-weight:600;">No health records yet</p>
+          <p style="color:var(--text-light);font-size:13px;margin-top:4px;">Submit your symptoms using the analysis tool to start tracking your progress.</p>
+        </div>`;
       document.getElementById('no-history-msg').style.display = 'flex';
       if (riskChart) riskChart.destroy();
       return;
@@ -671,7 +704,7 @@ async function loadHistory() {
       </div>
     `).join('');
   } catch(e) {
-    container.innerHTML = `<p style="color:#dc2626;font-size:13px;text-align:center;padding:16px;">Error: ${e.message}</p>`;
+    container.innerHTML = `<div style="text-align:center;padding:24px;background:#fee2e2;border-radius:12px;color:#dc2626;font-size:13px;border:1px solid #fca5a5;">❌ Error: ${e.message}</div>`;
   }
 }
 
@@ -796,17 +829,32 @@ async function initMessages() {
   loadDoctorsForMsg();
 }
 
+let chatFallbackInterval = null;
+
 function startRealtimeChat(consultationId) {
   if (activeChannel) activeChannel.unsubscribe();
+  if (chatFallbackInterval) clearInterval(chatFallbackInterval);
+
   activeChannel = subscribeToMessages(consultationId, (newMsg) => {
     appendMessage(newMsg, currentUser.id);
   });
+
+  // FALLBACK: CRITICAL DEMO POLL (Poll every 2.5sec if sockets hang)
+  chatFallbackInterval = setInterval(() => {
+    const fetchLen = document.getElementById('chat-box').children.length;
+    // silent refresh mapping array size
+    getMessages(consultationId).then(msgs => {
+       if (msgs.length > fetchLen) loadMessages(true); // reload silently
+    }).catch(e => console.warn(e));
+  }, 2500);
 }
 
-async function loadMessages() {
+async function loadMessages(silent = false) {
   if (!activeConsultId && !currentUser.isDemo) return;
   const chatBox = document.getElementById('chat-box');
-  chatBox.innerHTML = '<p style="color:var(--text-light);font-size:13px;text-align:center;">Loading…</p>';
+  if (!silent) {
+    chatBox.innerHTML = '<div style="text-align:center;padding:20px 0;"><span class="spinner" style="border-color:rgba(201,75,106,0.3);border-top-color:var(--pink-600);width:16px;height:16px;"></span></div>';
+  }
 
   try {
     let msgs = [];
@@ -821,12 +869,18 @@ async function loadMessages() {
     }
 
     if (!msgs.length) {
-      chatBox.innerHTML = '<p style="color:var(--text-light);font-size:13px;text-align:center;">No messages yet. Start the conversation!</p>';
+      chatBox.innerHTML = `
+        <div style="text-align:center;padding:16px 0;">
+          <p style="font-size:24px;margin-bottom:6px;">💬</p>
+          <p style="color:var(--text-light);font-size:13px;font-weight:500;">Start conversation</p>
+          <p style="color:var(--border);font-size:11px;margin-top:2px;">Say hello to your doctor to begin.</p>
+        </div>
+      `;
       return;
     }
     chatBox.innerHTML = '';
     msgs.forEach(m => appendMessage(m, currentUser.id));
-    chatBox.scrollTop = chatBox.scrollHeight;
+    if (!silent) chatBox.scrollTop = chatBox.scrollHeight;
   } catch(e) {
     chatBox.innerHTML = `<p style="color:#dc2626;font-size:13px;text-align:center;">Error: ${e.message}</p>`;
   }
@@ -834,12 +888,12 @@ async function loadMessages() {
 
 function appendMessage(m, myId) {
   const chatBox = document.getElementById('chat-box');
-  const isSent  = m.sender_id === myId;
+  const isPatient  = m.sender_id === myId; // patient is the current user here
   const time    = new Date(m.created_at).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
   const div     = document.createElement('div');
-  div.style.cssText = `display:flex;flex-direction:column;align-items:${isSent ? 'flex-end' : 'flex-start'};`;
+  div.style.cssText = `display:flex;flex-direction:column;align-items:${isPatient ? 'flex-end' : 'flex-start'};`;
   div.innerHTML = `
-    <div class="${isSent ? 'msg-sent' : 'msg-received'}">${m.content}</div>
+    <div class="${isPatient ? 'msg-pink' : 'msg-purple'}">${m.content}</div>
     <div class="msg-time">${time}</div>
   `;
   chatBox.appendChild(div);
@@ -847,9 +901,14 @@ function appendMessage(m, myId) {
 }
 
 // ── SEND MESSAGE (Realtime-aware) ──
-async function sendMessage() {
+async function handleSendMessage() {
   const content = document.getElementById('msg-input').value.trim();
   if (!content) { showToast('Message cannot be empty', 'error'); return; }
+
+  const btnSend = document.querySelector('.chat-input-wrap button');
+  const ogNode = btnSend.innerHTML;
+  btnSend.disabled = true;
+  btnSend.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;margin-right:0px;"></span>';
 
   try {
     if (activeConsultId && !currentUser.isDemo) {
@@ -867,11 +926,14 @@ async function sendMessage() {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      await loadMessages();
+      await loadMessages(true);
     }
     document.getElementById('msg-input').value = '';
   } catch(e) {
     showToast('Send failed: ' + e.message, 'error');
+  } finally {
+    btnSend.disabled = false;
+    btnSend.innerHTML = ogNode;
   }
 }
 
