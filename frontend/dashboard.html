@@ -12,6 +12,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <script src="config.js"></script>
+  <script src="supabaseClient.js"></script>
+  <script src="db.js"></script>
   <style>
     /* ── Progress bar for risk ── */
     .risk-bar-track { height: 10px; border-radius: 8px; background: #f9d0dc; overflow: hidden; }
@@ -307,46 +310,72 @@
 
 <script>
 // ── Config ──
-const API_BASE = 'http://localhost:5000';
-const SUPABASE_URL = 'https://nmelswteuphdmhwxxxl.supabase.co';
-const SUPABASE_KEY = 'your_supabase_anon_key';
+const API_BASE = (window.SHECARE_CONFIG && window.SHECARE_CONFIG.apiBase) || 'http://localhost:5000';
 
 // ── State ──
-let currentUser = null;
-let lastResult  = null;
-let chipState   = { irregular_periods:0, weight_gain:0, acne:0, hair_growth:0, skin_darkening:0, fast_food:0 };
-let riskChart   = null;
+let currentUser      = null;
+let lastResult       = null;
+let chipState        = { irregular_periods:0, weight_gain:0, acne:0, hair_growth:0, skin_darkening:0, fast_food:0 };
+let riskChart        = null;
+let activeChannel    = null;   // Realtime subscription
+let activeConsultId  = null;   // Current consultation UUID
 
-// ── Init ──
-document.addEventListener('DOMContentLoaded', () => {
+// ── Auth Guard + Init ──
+document.addEventListener('DOMContentLoaded', async () => {
+  // 1. Try Supabase session first
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) {
+        const dbUser = await getUserData(session.user.id);
+        currentUser = {
+          id:    session.user.id,
+          email: session.user.email,
+          name:  dbUser?.name || session.user.user_metadata?.full_name || session.user.email.split('@')[0],
+          age:   dbUser?.age,
+          role:  dbUser?.role || 'patient'
+        };
+        localStorage.setItem('shecare_user', JSON.stringify(currentUser));
+        initUI();
+        return;
+      }
+    } catch(e) { console.warn('Supabase session check:', e.message); }
+  }
+
+  // 2. Fallback: localStorage (demo mode)
   const saved = localStorage.getItem('shecare_user');
   if (!saved) { window.location.href = 'index.html'; return; }
-  currentUser = JSON.parse(saved);
-
-  // Populate nav
-  const initials = (currentUser.name || 'U').charAt(0).toUpperCase();
-  document.getElementById('nav-avatar').textContent = initials;
-  document.getElementById('nav-name').textContent = currentUser.name || currentUser.email || 'User';
-  document.getElementById('welcome-name').textContent = (currentUser.name || 'friend').split(' ')[0];
-
-  // Fix grid for 2-col by hiding middle
-  document.getElementById('app-grid').style.gridTemplateColumns = '360px 1fr';
+  try {
+    currentUser = JSON.parse(saved);
+    if (currentUser.role === 'doctor') { window.location.href = 'doctor.html'; return; }
+    initUI();
+  } catch(e) {
+    localStorage.removeItem('shecare_user');
+    window.location.href = 'index.html';
+  }
 });
+
+function initUI() {
+  const initials = (currentUser.name || 'U').charAt(0).toUpperCase();
+  document.getElementById('nav-avatar').textContent   = initials;
+  document.getElementById('nav-name').textContent     = currentUser.name || currentUser.email || 'User';
+  document.getElementById('welcome-name').textContent = (currentUser.name || 'friend').split(' ')[0];
+  document.getElementById('app-grid').style.gridTemplateColumns = '360px 1fr';
+}
 
 // ── Tab switching ──
 function switchTab(tab) {
   ['symptoms','history','doctors','messages'].forEach(t => {
     document.getElementById('panel-'+t).classList.remove('active');
     document.getElementById('tab-'+t).classList.remove('active');
-    const links = document.querySelectorAll('.nav-link');
-    links.forEach(l => l.classList.remove('active'));
   });
   document.getElementById('panel-'+tab).classList.add('active');
   document.getElementById('tab-'+tab).classList.add('active');
 
   if (tab === 'history')  loadHistory();
   if (tab === 'doctors')  loadDoctors();
-  if (tab === 'messages') loadDoctorsForMsg();
+  if (tab === 'messages') initMessages();
 }
 
 // ── Chip toggle ──
@@ -398,13 +427,26 @@ async function submitPrediction() {
 
     lastResult = { ...payload, ...data, name: currentUser.name, age: currentUser.age || '—' };
     renderResult(data);
+
+    // Save to Supabase via db.js
+    if (!currentUser.isDemo) {
+      await saveHealthData(currentUser.id, lastResult);
+    }
+
     showToast('Analysis complete!', 'success');
+
+    // Auto-suggest doctors on High Risk
+    if (data.risk === 2) {
+      setTimeout(() => {
+        showToast('⚠️ High risk detected — see recommended doctors below', 'error');
+      }, 1500);
+    }
   } catch(e) {
     showToast('Backend error: ' + e.message, 'error');
   } finally {
     btn.disabled = false;
     btnTxt.innerHTML = '🔍 Analyze My Symptoms';
-    document.getElementById('sim-result').style.display = 'none'; // Hide old sim
+    document.getElementById('sim-result').style.display = 'none';
   }
 }
 
@@ -590,16 +632,23 @@ async function downloadReport() {
   }
 }
 
-// ── LOAD HISTORY ──
+// ── LOAD HISTORY via db.js ──
 async function loadHistory() {
   const container = document.getElementById('history-list');
   container.innerHTML = '<p style="color:var(--text-light);font-size:14px;text-align:center;padding:20px 0;">Loading…</p>';
 
   try {
-    const res  = await fetch(`${API_BASE}/health/history?user_id=${currentUser.id}`);
-    const data = await res.json();
+    // Try db.js first, fall back to Flask API
+    let data;
+    if (!currentUser.isDemo) {
+      data = await getHealthHistory(currentUser.id);
+    }
+    if (!data || !data.length) {
+      const res = await fetch(`${API_BASE}/health/history?user_id=${currentUser.id}`);
+      data = await res.json();
+    }
 
-    if (!data.length) {
+    if (!data || !data.length) {
       container.innerHTML = '<p style="color:var(--text-light);font-size:14px;text-align:center;padding:24px 0;">No records yet. Submit symptoms to start tracking!</p>';
       document.getElementById('no-history-msg').style.display = 'flex';
       if (riskChart) riskChart.destroy();
@@ -724,83 +773,115 @@ async function sendDoctorRequest(doctorId, doctorName) {
   }
 }
 
-// ── LOAD DOCTORS FOR MSG DROPDOWN ──
-async function loadDoctorsForMsg() {
-  try {
-    const res     = await fetch(`${API_BASE}/doctors`);
-    const doctors = await res.json();
-    const sel     = document.getElementById('msg-doctor-select');
-    sel.innerHTML = '<option value="">— choose doctor —</option>';
-    doctors.forEach(d => {
-      const opt = document.createElement('option');
-      opt.value       = d.id;
-      opt.textContent = d.name || d.email;
-      sel.appendChild(opt);
-    });
-  } catch(e) { /* silent */ }
+// ── MESSAGES — Realtime via Supabase ──
+async function initMessages() {
+  // Load consultation first to get consultation_id
+  if (!currentUser.isDemo) {
+    try {
+      const consultation = await getPatientConsultation(currentUser.id);
+      if (consultation && consultation.id) {
+        activeConsultId = consultation.id;
+        await loadMessages();
+        startRealtimeChat(consultation.id);
+        // Populate doctor selector if needed
+        const sel = document.getElementById('msg-doctor-select');
+        if (consultation.doctor) {
+          sel.innerHTML = `<option value="${consultation.doctor.id}">${consultation.doctor.name}</option>`;
+        }
+        return;
+      }
+    } catch(e) { console.warn('Consultation fetch:', e.message); }
+  }
+  // Fallback: load doctors for dropdown
+  loadDoctorsForMsg();
 }
 
-// ── LOAD MESSAGES ──
-async function loadMessages() {
-  const doctorId = document.getElementById('msg-doctor-select').value;
-  if (!doctorId) return;
+function startRealtimeChat(consultationId) {
+  if (activeChannel) activeChannel.unsubscribe();
+  activeChannel = subscribeToMessages(consultationId, (newMsg) => {
+    appendMessage(newMsg, currentUser.id);
+  });
+}
 
+async function loadMessages() {
+  if (!activeConsultId && !currentUser.isDemo) return;
   const chatBox = document.getElementById('chat-box');
   chatBox.innerHTML = '<p style="color:var(--text-light);font-size:13px;text-align:center;">Loading…</p>';
 
   try {
-    const res  = await fetch(`${API_BASE}/messages?user1=${currentUser.id}&user2=${doctorId}`);
-    const msgs = await res.json();
+    let msgs = [];
+    if (activeConsultId && !currentUser.isDemo) {
+      msgs = await getMessages(activeConsultId);
+    } else {
+      // Fallback to Flask API
+      const doctorId = document.getElementById('msg-doctor-select').value;
+      if (!doctorId) { chatBox.innerHTML = '<p style="color:var(--text-light);font-size:13px;text-align:center;">Select a doctor to start chatting</p>'; return; }
+      const res = await fetch(`${API_BASE}/messages?user1=${currentUser.id}&user2=${doctorId}`);
+      msgs = await res.json();
+    }
 
     if (!msgs.length) {
       chatBox.innerHTML = '<p style="color:var(--text-light);font-size:13px;text-align:center;">No messages yet. Start the conversation!</p>';
       return;
     }
-
-    chatBox.innerHTML = msgs.map(m => {
-      const isSent = m.sender_id === currentUser.id;
-      const time   = new Date(m.created_at).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
-      return `
-        <div style="display:flex;flex-direction:column;align-items:${isSent ? 'flex-end' : 'flex-start'};">
-          <div class="${isSent ? 'msg-sent' : 'msg-received'}">${m.content}</div>
-          <div class="msg-time">${time}</div>
-        </div>`;
-    }).join('');
-
+    chatBox.innerHTML = '';
+    msgs.forEach(m => appendMessage(m, currentUser.id));
     chatBox.scrollTop = chatBox.scrollHeight;
   } catch(e) {
     chatBox.innerHTML = `<p style="color:#dc2626;font-size:13px;text-align:center;">Error: ${e.message}</p>`;
   }
 }
 
-// ── SEND MESSAGE ──
-async function sendMessage() {
-  const doctorId = document.getElementById('msg-doctor-select').value;
-  const content  = document.getElementById('msg-input').value.trim();
+function appendMessage(m, myId) {
+  const chatBox = document.getElementById('chat-box');
+  const isSent  = m.sender_id === myId;
+  const time    = new Date(m.created_at).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+  const div     = document.createElement('div');
+  div.style.cssText = `display:flex;flex-direction:column;align-items:${isSent ? 'flex-end' : 'flex-start'};`;
+  div.innerHTML = `
+    <div class="${isSent ? 'msg-sent' : 'msg-received'}">${m.content}</div>
+    <div class="msg-time">${time}</div>
+  `;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
 
-  if (!doctorId) { showToast('Select a doctor first', 'error'); return; }
-  if (!content)  { showToast('Message cannot be empty', 'error'); return; }
+// ── SEND MESSAGE (Realtime-aware) ──
+async function sendMessage() {
+  const content = document.getElementById('msg-input').value.trim();
+  if (!content) { showToast('Message cannot be empty', 'error'); return; }
 
   try {
-    const res  = await fetch(`${API_BASE}/messages/send`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sender_id: currentUser.id, receiver_id: doctorId, content })
-    });
-    const data = await res.json();
-    if (data.success) {
-      document.getElementById('msg-input').value = '';
-      await loadMessages();
+    if (activeConsultId && !currentUser.isDemo) {
+      // Supabase realtime path
+      const { error } = await sendMessage(activeConsultId, currentUser.id, content);
+      if (error) throw new Error(error);
     } else {
-      showToast(data.error || 'Failed to send', 'error');
+      // Flask API fallback
+      const doctorId = document.getElementById('msg-doctor-select').value;
+      if (!doctorId) { showToast('Select a doctor first', 'error'); return; }
+      const res  = await fetch(`${API_BASE}/messages/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender_id: currentUser.id, receiver_id: doctorId, content })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      await loadMessages();
     }
+    document.getElementById('msg-input').value = '';
   } catch(e) {
-    showToast('Network error: ' + e.message, 'error');
+    showToast('Send failed: ' + e.message, 'error');
   }
 }
 
-// ── LOGOUT ──
-function logout() {
+// ── LOGOUT (clears Supabase session + localStorage) ──
+async function logout() {
+  const sb = getSupabase();
+  if (sb) {
+    try { await sb.auth.signOut(); } catch(e) {}
+  }
+  if (activeChannel) activeChannel.unsubscribe();
   localStorage.removeItem('shecare_user');
   window.location.href = 'index.html';
 }

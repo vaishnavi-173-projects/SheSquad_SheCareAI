@@ -1,311 +1,373 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SheCare AI – Your Health. Our Priority.</title>
-  <meta name="description"
-    content="SheCare AI – AI-powered reproductive health assistant for PCOS risk prediction, health tracking, and doctor-ready reports." />
+  <meta name="description" content="SheCare AI – AI-powered reproductive health assistant for PCOS risk prediction, health tracking, and doctor-ready reports." />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap"
-    rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <script src="config.js"></script>
+  <script src="supabaseClient.js"></script>
+  <style>
+    .auth-tab { padding:8px 20px; border-radius:50px; font-size:14px; font-weight:500; cursor:pointer; border:none; background:transparent; color:var(--text-mid); transition:all 0.2s; }
+    .auth-tab.active { background:var(--pink-600); color:white; box-shadow:0 2px 10px rgba(201,75,106,0.3); }
+    .auth-panel { display:none; }
+    .auth-panel.active { display:block; animation:fadeInUp 0.3s ease; }
+    .input-group { position:relative; margin-bottom:14px; }
+    .input-group .input-icon { position:absolute; left:14px; top:50%; transform:translateY(-50%); font-size:16px; pointer-events:none; }
+    .input-group input { padding-left:42px; }
+    .spinner-sm { width:16px; height:16px; border:2px solid rgba(255,255,255,0.4); border-top-color:white; border-radius:50%; animation:spin 0.7s linear infinite; display:inline-block; vertical-align:middle; margin-right:6px; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+  </style>
 </head>
-
 <body>
-  <!-- ======================================== -->
-  <!-- LOGIN / ONBOARDING PAGE                  -->
-  <!-- ======================================== -->
-  <div class="login-bg" id="login-page">
 
-    <!-- ── Decorative floating shapes ── -->
-    <div
-      style="position:absolute;top:5%;left:8%;width:120px;height:120px;border-radius:50%;background:rgba(255,180,200,0.25);filter:blur(30px);pointer-events:none;">
+<!-- ======================================== -->
+<!-- LOGIN / AUTH PAGE                        -->
+<!-- ======================================== -->
+<div class="login-bg" id="login-page">
+
+  <!-- Decorative blobs -->
+  <div style="position:absolute;top:5%;left:8%;width:120px;height:120px;border-radius:50%;background:rgba(255,180,200,0.25);filter:blur(30px);pointer-events:none;"></div>
+  <div style="position:absolute;bottom:12%;right:10%;width:180px;height:180px;border-radius:50%;background:rgba(255,160,185,0.2);filter:blur(40px);pointer-events:none;"></div>
+
+  <!-- Logo & Branding -->
+  <div class="flex flex-col items-center mb-6 fade-in-up" style="animation-delay:0s;">
+    <div style="width:80px;height:80px;background:linear-gradient(135deg,#f4778a,#c94b6a);border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(201,75,106,0.35);margin-bottom:12px;">
+      <svg width="44" height="44" viewBox="0 0 48 48" fill="none">
+        <path d="M24 4C20 4 16 6 14 10C12 14 12 18 14 22C16 14 20 10 24 8C28 10 32 14 34 22C36 18 36 14 34 10C32 6 28 4 24 4Z" fill="white" opacity="0.9"/>
+        <path d="M24 8C20 12 14 20 14 28C14 36 18 42 24 44C30 42 34 36 34 28C34 20 28 12 24 8Z" fill="white" opacity="0.75"/>
+        <ellipse cx="24" cy="28" rx="5" ry="6" fill="rgba(201,75,106,0.4)"/>
+      </svg>
     </div>
-    <div
-      style="position:absolute;bottom:12%;right:10%;width:180px;height:180px;border-radius:50%;background:rgba(255,160,185,0.2);filter:blur(40px);pointer-events:none;">
-    </div>
-
-    <!-- ── Logo & Branding ── -->
-    <div class="flex flex-col items-center mb-6 fade-in-up" style="animation-delay:0s;">
-      <!-- Logo SVG -->
-      <div
-        style="width:80px;height:80px;background:linear-gradient(135deg,#f4778a,#c94b6a);border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(201,75,106,0.35);margin-bottom:12px;">
-        <svg width="44" height="44" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path
-            d="M24 4C20 4 16 6 14 10C12 14 12 18 14 22C16 14 20 10 24 8C28 10 32 14 34 22C36 18 36 14 34 10C32 6 28 4 24 4Z"
-            fill="white" opacity="0.9" />
-          <path d="M24 8C20 12 14 20 14 28C14 36 18 42 24 44C30 42 34 36 34 28C34 20 28 12 24 8Z" fill="white"
-            opacity="0.75" />
-          <ellipse cx="24" cy="28" rx="5" ry="6" fill="rgba(201,75,106,0.4)" />
-          <path d="M20 20C22 22 24 26 24 26C24 26 26 22 28 20" stroke="white" stroke-width="1.5" stroke-linecap="round"
-            fill="none" opacity="0.6" />
-        </svg>
-      </div>
-      <h1 class="serif text-3xl font-bold text-gradient" style="letter-spacing:-0.5px;">SheCare AI</h1>
-      <p
-        style="font-size:11px;letter-spacing:3px;color:var(--text-mid);text-transform:uppercase;margin-top:4px;font-weight:500;">
-        Your Health. Our Priority.</p>
-    </div>
-
-    <!-- ── Hero Text ── -->
-    <div class="text-center mb-6 fade-in-up" style="animation-delay:0.1s;max-width:380px;">
-      <h2 class="serif text-xl md:text-2xl font-bold" style="color:var(--text-dark);line-height:1.35;">Take Care
-        Today,<br />For a Healthier Tomorrow</h2>
-      <p style="font-size:14px;color:var(--text-mid);margin-top:8px;line-height:1.5;">Early insights. Better decisions.
-        Stronger you.</p>
-    </div>
-
-    <!-- ── Login Card ── -->
-    <div class="login-card fade-in-up" style="animation-delay:0.2s;">
-      <h3 class="serif text-xl font-bold" style="color:var(--text-dark);text-align:center;">Welcome! Let's get started
-      </h3>
-      <p style="text-align:center;font-size:13px;color:var(--text-light);margin-top:4px;">Please enter your age to
-        continue</p>
-
-      <!-- Age Input -->
-      <div style="margin-top:20px;">
-        <label class="form-label" style="font-weight:600;color:var(--text-dark);font-size:14px;">Your Age</label>
-        <div style="position:relative;margin-top:6px;">
-          <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:18px;">📅</span>
-          <input type="number" id="age_input" class="form-input" placeholder="Enter your age" min="10" max="65"
-            style="padding-left:42px;padding-right:60px;font-size:15px;height:48px;" />
-          <span
-            style="position:absolute;right:16px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--pink-600);font-weight:600;">Years</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;margin-top:8px;justify-content:center;">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-            <path
-              d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 2a2 2 0 110 4 2 2 0 010-4zm0 10c-2 0-3.7-1-4.7-2.5C4.7 9.2 6.3 8.5 8 8.5s3.3.7 4.7 2A5.5 5.5 0 018 13z"
-              fill="#b07090" />
-          </svg>
-          <span style="font-size:12px;color:var(--text-light);">Your data is private and secure</span>
-        </div>
-      </div>
-
-      <!-- Continue Button -->
-      <button id="btn_continue" class="btn-pink w-full mt-5"
-        style="justify-content:center;font-size:16px;padding:14px 24px;" onclick="continueWithAge()">
-        Continue <span style="font-size:18px;">→</span>
-      </button>
-
-      <!-- Divider -->
-      <div class="divider">or</div>
-
-      <!-- Google Login -->
-      <button id="btn_google" class="btn-google" onclick="loginWithGoogle()">
-        <svg width="20" height="20" viewBox="0 0 24 24">
-          <path
-            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-            fill="#4285F4" />
-          <path
-            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-            fill="#34A853" />
-          <path
-            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-            fill="#FBBC05" />
-          <path
-            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-            fill="#EA4335" />
-        </svg>
-        Continue with Google
-      </button>
-
-      <!-- Doctor Login Link -->
-      <div style="text-align:center;margin-top:16px;">
-        <button onclick="loginAsDoctor()"
-          style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--pink-600);text-decoration:underline;font-weight:500;">Login
-          as Doctor (Demo)</button>
-      </div>
-    </div>
-
-    <!-- ── Trust Badges ── -->
-    <div class="trust-badges fade-in-up" style="animation-delay:0.35s;margin-top:28px;position:relative;z-index:1;">
-      <div class="trust-badge">
-        <div class="badge-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-            <path d="M9 12l2 2 4-4" />
-          </svg>
-        </div>
-        <span>Private &amp; Secure</span>
-        <small>Your data is always protected</small>
-      </div>
-      <div class="trust-badge">
-        <div class="badge-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round">
-            <path
-              d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
-            <path d="M3.5 12h3l2-4 3 8 2-4h3.5" />
-          </svg>
-        </div>
-        <span>Personalized Insights</span>
-        <small>AI-powered insights just for you</small>
-      </div>
-      <div class="trust-badge">
-        <div class="badge-icon">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-            stroke-linecap="round">
-            <circle cx="12" cy="8" r="3" />
-            <path d="M12 11v5" />
-            <path d="M9 16h6" />
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
-          </svg>
-        </div>
-        <span>Doctor-Ready Reports</span>
-        <small>Better conversations, better care</small>
-      </div>
-    </div>
-
-    <!-- ── Footer ── -->
-    <p class="fade-in-up"
-      style="animation-delay:0.45s;margin-top:20px;font-size:13px;color:var(--text-mid);position:relative;z-index:1;">
-      Already have an account? <a href="#" onclick="loginWithGoogle();return false;"
-        style="color:var(--pink-600);font-weight:600;text-decoration:none;">Login</a>
-    </p>
-
-    <!-- Footer Disclaimer -->
-    <footer style="margin-top: 40px; text-align: center; color: var(--text-mid); font-size: 12px; opacity: 0.8;">
-      “This system does not provide medical diagnosis. It assists in early risk detection.”
-    </footer>
+    <h1 class="serif text-3xl font-bold text-gradient" style="letter-spacing:-0.5px;">SheCare AI</h1>
+    <p style="font-size:11px;letter-spacing:3px;color:var(--text-mid);text-transform:uppercase;margin-top:4px;font-weight:500;">Your Health. Our Priority.</p>
   </div>
 
-  <!-- ── Toast Container ── -->
-  <div id="toast-container" class="toast-container"></div>
+  <!-- Hero Text -->
+  <div class="text-center mb-6 fade-in-up" style="animation-delay:0.1s;max-width:380px;">
+    <h2 class="serif text-xl md:text-2xl font-bold" style="color:var(--text-dark);line-height:1.35;">Take Care Today,<br/>For a Healthier Tomorrow</h2>
+    <p style="font-size:14px;color:var(--text-mid);margin-top:8px;line-height:1.5;">Early insights. Better decisions. Stronger you.</p>
+  </div>
 
-  <script>
-    // ── Supabase Client ──
-    const SUPABASE_URL = 'https://nmelswteuphdmhwxxxl.supabase.co';
-    const SUPABASE_KEY = 'your_supabase_anon_key';
-    let supabaseClient;
+  <!-- Auth Card -->
+  <div class="login-card fade-in-up" style="animation-delay:0.2s;">
+
+    <!-- Tab switcher: Sign Up / Log In -->
+    <div style="display:flex;gap:6px;margin-bottom:20px;background:#fff5f7;padding:4px;border-radius:50px;">
+      <button class="auth-tab active" id="tab-signup" onclick="switchAuthTab('signup')">Create Account</button>
+      <button class="auth-tab" id="tab-login"  onclick="switchAuthTab('login')">Log In</button>
+    </div>
+
+    <!-- ── SIGN UP PANEL ── -->
+    <div id="panel-signup" class="auth-panel active">
+      <div class="input-group">
+        <span class="input-icon">👤</span>
+        <input type="text" id="signup-name" class="form-input" placeholder="Your full name" autocomplete="name" />
+      </div>
+      <div class="input-group">
+        <span class="input-icon">📧</span>
+        <input type="email" id="signup-email" class="form-input" placeholder="Email address" autocomplete="email" />
+      </div>
+      <div class="input-group">
+        <span class="input-icon">🔒</span>
+        <input type="password" id="signup-password" class="form-input" placeholder="Password (min 6 chars)" autocomplete="new-password" />
+      </div>
+      <div class="input-group">
+        <span class="input-icon">📅</span>
+        <input type="number" id="signup-age" class="form-input" placeholder="Your age" min="10" max="65" />
+      </div>
+      <button id="btn-signup" class="btn-pink w-full" style="justify-content:center;font-size:15px;padding:13px;" onclick="handleSignup()">
+        <span id="btn-signup-txt">🌸 Create My Account</span>
+      </button>
+    </div>
+
+    <!-- ── LOGIN PANEL ── -->
+    <div id="panel-login" class="auth-panel">
+      <div class="input-group">
+        <span class="input-icon">📧</span>
+        <input type="email" id="login-email" class="form-input" placeholder="Email address" autocomplete="email" />
+      </div>
+      <div class="input-group">
+        <span class="input-icon">🔒</span>
+        <input type="password" id="login-password" class="form-input" placeholder="Password" autocomplete="current-password" />
+      </div>
+      <button id="btn-login" class="btn-pink w-full" style="justify-content:center;font-size:15px;padding:13px;" onclick="handleLogin()">
+        <span id="btn-login-txt">🔑 Log In</span>
+      </button>
+    </div>
+
+    <!-- Divider -->
+    <div class="divider">or</div>
+
+    <!-- Google OAuth -->
+    <button id="btn-google" class="btn-google" onclick="loginWithGoogle()">
+      <svg width="20" height="20" viewBox="0 0 24 24">
+        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+      </svg>
+      Continue with Google
+    </button>
+
+    <!-- Doctor Login Link -->
+    <div style="text-align:center;margin-top:16px;">
+      <button onclick="loginAsDoctor()"
+        style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--pink-600);text-decoration:underline;font-weight:500;">
+        🩺 Login as Doctor (Demo)
+      </button>
+    </div>
+  </div>
+
+  <!-- Trust Badges -->
+  <div class="trust-badges fade-in-up" style="animation-delay:0.35s;margin-top:28px;position:relative;z-index:1;">
+    <div class="trust-badge">
+      <div class="badge-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/>
+        </svg>
+      </div>
+      <span>Private &amp; Secure</span>
+      <small>Your data is always protected</small>
+    </div>
+    <div class="trust-badge">
+      <div class="badge-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
+        </svg>
+      </div>
+      <span>Personalized Insights</span>
+      <small>AI-powered just for you</small>
+    </div>
+    <div class="trust-badge">
+      <div class="badge-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8M10 9H8"/>
+        </svg>
+      </div>
+      <span>Doctor-Ready Reports</span>
+      <small>Better conversations, better care</small>
+    </div>
+  </div>
+
+  <!-- Disclaimer -->
+  <footer style="margin-top:28px;text-align:center;color:var(--text-mid);font-size:12px;opacity:0.8;">
+    "This system does not provide medical diagnosis. It assists in early risk detection."
+  </footer>
+</div>
+
+<!-- Toast -->
+<div id="toast-container" class="toast-container"></div>
+
+<script>
+// ── Tab switching ──
+function switchAuthTab(tab) {
+  ['signup','login'].forEach(t => {
+    document.getElementById('panel-' + t).classList.remove('active');
+    document.getElementById('tab-' + t).classList.remove('active');
+  });
+  document.getElementById('panel-' + tab).classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+
+// ── Loading state helpers ──
+function setLoading(btnId, txtId, loading, originalText) {
+  const btn = document.getElementById(btnId);
+  const txt = document.getElementById(txtId);
+  btn.disabled = loading;
+  txt.innerHTML = loading
+    ? '<span class="spinner-sm"></span> Please wait…'
+    : originalText;
+}
+
+// ── Check existing session on load ──
+window.addEventListener('DOMContentLoaded', async () => {
+  const sb = getSupabase();
+  if (sb) {
     try {
-      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    } catch (e) {
-      console.warn('Supabase client init skipped:', e.message);
-    }
-
-    // ── Check existing login ──
-    window.addEventListener('DOMContentLoaded', async () => {
-      const existing = localStorage.getItem('shecare_user');
-      if (existing) {
-        const user = JSON.parse(existing);
-        if (user.role === 'doctor') {
-          window.location.href = 'doctor.html';
-        } else {
-          window.location.href = 'dashboard.html';
-        }
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) {
+        await redirectByRole(session.user);
         return;
       }
+    } catch(e) { console.warn('Session check:', e.message); }
+  }
 
-      // Check Supabase session
-      if (supabaseClient) {
-        try {
-          const { data: { session } } = await supabaseClient.auth.getSession();
-          if (session) {
-            const userData = {
-              id: session.user.id,
-              email: session.user.email,
-              name: session.user.user_metadata.full_name || session.user.email.split('@')[0],
-              role: 'user'
-            };
-            localStorage.setItem('shecare_user', JSON.stringify(userData));
-            window.location.href = 'dashboard.html';
-          }
-        } catch (e) {
-          console.warn('Session check failed:', e.message);
-        }
+  // Also check localStorage fallback (demo mode)
+  const saved = localStorage.getItem('shecare_user');
+  if (saved) {
+    try {
+      const u = JSON.parse(saved);
+      if (u.role === 'doctor') window.location.href = 'doctor.html';
+      else                     window.location.href = 'dashboard.html';
+    } catch(e) { localStorage.removeItem('shecare_user'); }
+  }
+
+  document.getElementById('signup-name').focus();
+});
+
+// ── Redirect by role ──
+async function redirectByRole(authUser) {
+  // Check users table for role
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const { data } = await sb.from('users').select('role').eq('id', authUser.id).single();
+      if (data?.role === 'doctor') { window.location.href = 'doctor.html'; return; }
+    } catch(e) {}
+  }
+  window.location.href = 'dashboard.html';
+}
+
+// ── SIGN UP ──
+async function handleSignup() {
+  const name     = document.getElementById('signup-name').value.trim();
+  const email    = document.getElementById('signup-email').value.trim();
+  const password = document.getElementById('signup-password').value;
+  const age      = parseInt(document.getElementById('signup-age').value);
+
+  if (!name)                        { showToast('Please enter your name', 'error'); return; }
+  if (!email || !email.includes('@')){ showToast('Please enter a valid email', 'error'); return; }
+  if (!password || password.length < 6){ showToast('Password must be at least 6 characters', 'error'); return; }
+  if (!age || age < 10 || age > 65) { showToast('Please enter a valid age (10–65)', 'error'); return; }
+
+  const sb = getSupabase();
+  if (!sb) {
+    // Demo fallback
+    demoLogin(name, email, age, 'patient');
+    return;
+  }
+
+  setLoading('btn-signup', 'btn-signup-txt', true);
+  try {
+    const { data, error } = await sb.auth.signUp({
+      email, password,
+      options: {
+        data: { full_name: name, age, role: 'patient' }
       }
-
-      // Focus age input
-      document.getElementById('age_input').focus();
     });
 
-    // ── Age input — enter key ──
-    document.getElementById('age_input').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') continueWithAge();
+    if (error) throw error;
+
+    if (data.user && !data.session) {
+      // Email confirmation required
+      showToast('✅ Account created! Check your email to confirm.', 'success');
+    } else if (data.session) {
+      // Auto-confirmed
+      await upsertUser(data.user, 'patient');
+      showToast('🌸 Welcome to SheCare AI!', 'success');
+      setTimeout(() => window.location.href = 'dashboard.html', 800);
+    }
+  } catch(e) {
+    showToast(e.message || 'Signup failed', 'error');
+  } finally {
+    setLoading('btn-signup', 'btn-signup-txt', false, '🌸 Create My Account');
+  }
+}
+
+// ── LOGIN ──
+async function handleLogin() {
+  const email    = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+
+  if (!email)    { showToast('Please enter your email', 'error'); return; }
+  if (!password) { showToast('Please enter your password', 'error'); return; }
+
+  const sb = getSupabase();
+  if (!sb) {
+    demoLogin('User', email, null, 'patient');
+    return;
+  }
+
+  setLoading('btn-login', 'btn-login-txt', true);
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+
+    showToast('✅ Logged in!', 'success');
+    await redirectByRole(data.user);
+  } catch(e) {
+    showToast(e.message || 'Login failed', 'error');
+  } finally {
+    setLoading('btn-login', 'btn-login-txt', false, '🔑 Log In');
+  }
+}
+
+// ── GOOGLE OAUTH ──
+async function loginWithGoogle() {
+  const sb = getSupabase();
+  if (!sb) { showToast('Google login requires Supabase config', 'info'); return; }
+
+  const cfg = window.SHECARE_CONFIG;
+  try {
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: cfg.redirectBase + '/frontend/dashboard.html'
+      }
     });
+    if (error) throw error;
+  } catch(e) {
+    showToast('Google OAuth error: ' + e.message, 'error');
+  }
+}
 
-    // ── Continue with age (demo mode) ──
-    function continueWithAge() {
-      const ageEl = document.getElementById('age_input');
-      const age = parseInt(ageEl.value);
+// ── DOCTOR DEMO LOGIN ──
+function loginAsDoctor() {
+  const doctorUser = {
+    id: 'doctor-demo-' + Date.now(),
+    email: 'doctor@shecare.ai',
+    name: 'Dr. Priya Sharma',
+    role: 'doctor',
+    isDemo: true
+  };
+  localStorage.setItem('shecare_user', JSON.stringify(doctorUser));
+  showToast('🩺 Logging in as Doctor…', 'success');
+  setTimeout(() => window.location.href = 'doctor.html', 700);
+}
 
-      if (!age || age < 10 || age > 65) {
-        showToast('Please enter a valid age between 10 and 65', 'error');
-        ageEl.focus();
-        return;
-      }
+// ── DEMO FALLBACK (no Supabase key) ──
+function demoLogin(name, email, age, role) {
+  const user = {
+    id: (role === 'doctor' ? 'demo-doc-' : 'demo-') + Date.now(),
+    email, name, age, role, isDemo: true
+  };
+  localStorage.setItem('shecare_user', JSON.stringify(user));
+  showToast('🌸 Welcome (Demo Mode)!', 'success');
+  setTimeout(() => {
+    window.location.href = role === 'doctor' ? 'doctor.html' : 'dashboard.html';
+  }, 700);
+}
 
-      const demoUser = {
-        id: 'demo-' + Date.now(),
-        email: 'demo@shecare.ai',
-        name: 'Guest User',
-        age: age,
-        role: 'user'
-      };
-      localStorage.setItem('shecare_user', JSON.stringify(demoUser));
-      localStorage.setItem('shecare_age', age);
+// Enter key support
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const activePanel = document.querySelector('.auth-panel.active');
+  if (!activePanel) return;
+  if (activePanel.id === 'panel-signup') handleSignup();
+  else handleLogin();
+});
 
-      showToast('Welcome to SheCare AI! Redirecting...', 'success');
-      setTimeout(() => {
-        window.location.href = 'dashboard.html';
-      }, 600);
-    }
-
-    // ── Google OAuth ──
-    async function loginWithGoogle() {
-      if (!supabaseClient) {
-        showToast('Google login requires Supabase configuration', 'info');
-        return;
-      }
-      try {
-        const { error } = await supabaseClient.auth.signInWithOAuth({
-          provider: 'google',
-          options: { redirectTo: window.location.origin + '/frontend/dashboard.html' }
-        });
-        if (error) showToast(error.message, 'error');
-      } catch (e) {
-        showToast('OAuth error: ' + e.message, 'error');
-      }
-    }
-
-    // ── Doctor demo login ──
-    function loginAsDoctor() {
-      const doctorUser = {
-        id: 'doctor-demo-' + Date.now(),
-        email: 'doctor@shecare.ai',
-        name: 'Dr. Priya Sharma',
-        role: 'doctor'
-      };
-      localStorage.setItem('shecare_user', JSON.stringify(doctorUser));
-      showToast('Logging in as Doctor...', 'success');
-      setTimeout(() => {
-        window.location.href = 'doctor.html';
-      }, 600);
-    }
-
-    // ── Toast Notification ──
-    function showToast(msg, type) {
-      const container = document.getElementById('toast-container');
-      const toast = document.createElement('div');
-      toast.className = `toast toast-${type || 'info'}`;
-      toast.textContent = msg;
-      container.appendChild(toast);
-      setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateY(-10px)';
-        toast.style.transition = 'all 0.3s ease';
-        setTimeout(() => toast.remove(), 300);
-      }, 3000);
-    }
-  </script>
+// ── TOAST ──
+function showToast(msg, type) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type || 'info'}`;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-10px)';
+    toast.style.transition = 'all 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+</script>
 </body>
-
 </html>

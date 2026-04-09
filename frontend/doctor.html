@@ -11,6 +11,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <script src="config.js"></script>
+  <script src="supabaseClient.js"></script>
+  <script src="db.js"></script>
   <style>
     /* ── Patient list sidebar ── */
     .patient-list { display: flex; flex-direction: column; gap: 10px; }
@@ -288,48 +291,96 @@
 
 <script>
 // ── Config ──
-const API_BASE = 'http://localhost:5000';
+const API_BASE = (window.SHECARE_CONFIG && window.SHECARE_CONFIG.apiBase) || 'http://localhost:5000';
 
 // ── State ──
 let currentDoctor   = null;
 let allRequests     = [];
 let selectedRequest = null;
 let activeFilter    = 'all';
+let activeChannel   = null;   // Realtime messages
+let consultChannel  = null;   // Realtime requests
 
 // ── Init ──
-document.addEventListener('DOMContentLoaded', () => {
-  const saved = localStorage.getItem('shecare_user');
-  if (!saved) { window.location.href = 'index.html'; return; }
-
-  currentDoctor = JSON.parse(saved);
-  if (currentDoctor.role !== 'doctor') {
-    window.location.href = 'dashboard.html';
-    return;
+document.addEventListener('DOMContentLoaded', async () => {
+  // 1. Check Supabase session
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) {
+        const dbUser = await getUserData(session.user.id);
+        currentDoctor = {
+          id:    session.user.id,
+          email: session.user.email,
+          name:  dbUser?.name || session.user.user_metadata?.full_name || session.user.email.split('@')[0],
+          role:  dbUser?.role || 'doctor'
+        };
+        // Safety guard
+        if (currentDoctor.role !== 'doctor') {
+          window.location.href = 'dashboard.html';
+          return;
+        }
+        localStorage.setItem('shecare_user', JSON.stringify(currentDoctor));
+        initUI();
+        return;
+      }
+    } catch(e) { console.warn('Supabase session check:', e.message); }
   }
 
-  // Setup navbar
+  // 2. Fallback: localStorage
+  const saved = localStorage.getItem('shecare_user');
+  if (!saved) { window.location.href = 'index.html'; return; }
+  try {
+    currentDoctor = JSON.parse(saved);
+    if (currentDoctor.role !== 'doctor') { window.location.href = 'dashboard.html'; return; }
+    initUI();
+  } catch(e) {
+    localStorage.removeItem('shecare_user');
+    window.location.href = 'index.html';
+  }
+});
+
+function initUI() {
   const initials = (currentDoctor.name || 'D').charAt(0).toUpperCase();
   document.getElementById('nav-avatar').textContent = initials;
   document.getElementById('nav-name').textContent   = currentDoctor.name || currentDoctor.email || 'Doctor';
 
   loadRequests();
-});
+
+  // Subscribe to new requests (doctor side)
+  if (!currentDoctor.isDemo) {
+    consultChannel = subscribeToConsultations(currentDoctor.id, () => loadRequests());
+  }
+}
 
 // ── LOAD REQUESTS ──
 async function loadRequests() {
   const container = document.getElementById('request-list');
-  container.innerHTML = '<p style="color:var(--text-light);font-size:14px;text-align:center;padding:32px 0;">Loading…</p>';
 
   try {
-    const res  = await fetch(`${API_BASE}/doctor/requests?doctor_id=${currentDoctor.id}`);
-    const data = await res.json();
-    allRequests = Array.isArray(data) ? data : [];
+    if (!currentDoctor.isDemo) {
+      allRequests = await getDoctorConsultations(currentDoctor.id);
+      // Flatten joined user data
+      allRequests = allRequests.map(r => ({
+        ...r,
+        patient_id:   r.users?.id,
+        patient_name: r.users?.name,
+        patient_email:r.users?.email,
+        patient_age:  r.users?.age
+      }));
+    } else {
+      // Fallback
+      const res = await fetch(`${API_BASE}/doctor/requests?doctor_id=${currentDoctor.id}`);
+      allRequests = await res.json();
+    }
+
+    if (!Array.isArray(allRequests)) allRequests = [];
 
     // Update stats bar
     document.getElementById('stat-total').textContent    = allRequests.length;
     document.getElementById('stat-pending').textContent  = allRequests.filter(r => r.status === 'pending').length;
     document.getElementById('stat-accepted').textContent = allRequests.filter(r => r.status === 'accepted').length;
-    document.getElementById('stat-high').textContent     = '—'; // would need extra query
 
     renderRequestList();
   } catch(e) {
@@ -540,48 +591,39 @@ async function respondRequest(status) {
   btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;"></span>';
 
   try {
-    const res  = await fetch(`${API_BASE}/doctor/respond`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ request_id: requestId, status })
-    });
-    const data = await res.json();
-
-    if (data.success) {
-      showToast(
-        status === 'accepted'
-          ? `✅ Request accepted — you can now message ${selectedRequest.patient_name}`
-          : `❌ Request rejected`,
-        status === 'accepted' ? 'success' : 'info'
-      );
-
-      // Update local state
-      selectedRequest.status = status;
-      allRequests = allRequests.map(r => r.id === requestId ? { ...r, status } : r);
-
-      // Refresh badge and hide buttons
-      const statusBadge = { pending:'status-pending', accepted:'status-accepted', rejected:'status-rejected' };
-      const statusLabel = { pending:'⏳ Pending', accepted:'✅ Accepted', rejected:'❌ Rejected' };
-      const badge = document.getElementById('pt-status-badge');
-      badge.className   = 'badge ' + statusBadge[status];
-      badge.textContent = statusLabel[status];
-      document.getElementById('action-buttons').style.display = 'none';
-
-      // Update stats bar
-      document.getElementById('stat-pending').textContent  = allRequests.filter(r => r.status === 'pending').length;
-      document.getElementById('stat-accepted').textContent = allRequests.filter(r => r.status === 'accepted').length;
-
-      renderRequestList();
-
-      // Auto open messages for accepted
-      if (status === 'accepted') {
-        setTimeout(() => switchDTab('messages'), 600);
-      }
+    if (!currentDoctor.isDemo) {
+      await updateConsultationStatus(requestId, status);
     } else {
-      showToast(data.error || 'Failed to update request', 'error');
+      const res  = await fetch(`${API_BASE}/doctor/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request_id: requestId, status })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
     }
+
+    showToast(status === 'accepted' ? `✅ Request accepted` : `❌ Request rejected`, status === 'accepted' ? 'success' : 'info');
+
+    // Update local state
+    selectedRequest.status = status;
+    allRequests = allRequests.map(r => r.id === requestId ? { ...r, status } : r);
+
+    // Refresh display
+    const statusBadge = { pending:'status-pending', accepted:'status-accepted', rejected:'status-rejected' };
+    const statusLabel = { pending:'⏳ Pending', accepted:'✅ Accepted', rejected:'❌ Rejected' };
+    document.getElementById('pt-status-badge').className = 'badge ' + statusBadge[status];
+    document.getElementById('pt-status-badge').textContent = statusLabel[status];
+    document.getElementById('action-buttons').style.display = 'none';
+
+    document.getElementById('stat-pending').textContent  = allRequests.filter(r => r.status === 'pending').length;
+    document.getElementById('stat-accepted').textContent = allRequests.filter(r => r.status === 'accepted').length;
+
+    renderRequestList();
+    if (status === 'accepted') setTimeout(() => switchDTab('messages'), 600);
+
   } catch(e) {
-    showToast('Network error: ' + e.message, 'error');
+    showToast('Error: ' + e.message, 'error');
   } finally {
     btn.disabled = false;
     btn.innerHTML = originalTxt;
@@ -596,7 +638,14 @@ function switchDTab(tab) {
   });
   document.getElementById('dpanel-'+tab).classList.add('active');
   document.getElementById('dtab-'+tab).classList.add('active');
-  if (tab === 'messages' && selectedRequest) loadDoctorMessages();
+
+  if (tab === 'messages' && selectedRequest) {
+    if (activeChannel) activeChannel.unsubscribe();
+    loadDoctorMessages();
+    if (!currentDoctor.isDemo) {
+      activeChannel = subscribeToMessages(selectedRequest.id, (m) => doctorAppendMsg(m, currentDoctor.id));
+    }
+  }
 }
 
 // ── LOAD MESSAGES (doctor side) ──
@@ -606,28 +655,38 @@ async function loadDoctorMessages() {
   chatBox.innerHTML = '<p style="color:var(--text-light);font-size:13px;text-align:center;">Loading…</p>';
 
   try {
-    const res  = await fetch(`${API_BASE}/messages?user1=${currentDoctor.id}&user2=${selectedRequest.patient_id}`);
-    const msgs = await res.json();
+    let msgs = [];
+    if (!currentDoctor.isDemo) {
+      msgs = await getMessages(selectedRequest.id);
+    } else {
+      const res = await fetch(`${API_BASE}/messages?user1=${currentDoctor.id}&user2=${selectedRequest.patient_id}`);
+      msgs = await res.json();
+    }
 
     if (!msgs.length) {
       chatBox.innerHTML = '<p style="color:var(--text-light);font-size:13px;text-align:center;">No messages yet. Start the conversation!</p>';
       return;
     }
-
-    chatBox.innerHTML = msgs.map(m => {
-      const isSent = m.sender_id === currentDoctor.id;
-      const time   = new Date(m.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-      return `
-        <div style="display:flex;flex-direction:column;align-items:${isSent ? 'flex-end' : 'flex-start'};">
-          <div class="${isSent ? 'msg-sent' : 'msg-received'}">${m.content}</div>
-          <div class="msg-time">${time}</div>
-        </div>`;
-    }).join('');
-
+    chatBox.innerHTML = '';
+    msgs.forEach(m => doctorAppendMsg(m, currentDoctor.id));
     chatBox.scrollTop = chatBox.scrollHeight;
   } catch(e) {
     chatBox.innerHTML = `<p style="color:#dc2626;font-size:13px;text-align:center;">Error: ${e.message}</p>`;
   }
+}
+
+function doctorAppendMsg(m, myId) {
+  const chatBox = document.getElementById('doctor-chat-box');
+  const isSent  = m.sender_id === myId;
+  const time    = new Date(m.created_at).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+  const div     = document.createElement('div');
+  div.style.cssText = `display:flex;flex-direction:column;align-items:${isSent ? 'flex-end' : 'flex-start'};`;
+  div.innerHTML = `
+    <div class="${isSent ? 'msg-sent' : 'msg-received'}">${m.content}</div>
+    <div class="msg-time">${time}</div>
+  `;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 // ── SEND MESSAGE (doctor) ──
@@ -637,29 +696,30 @@ async function doctorSendMessage() {
   if (!content) { showToast('Message cannot be empty', 'error'); return; }
 
   try {
-    const res  = await fetch(`${API_BASE}/messages/send`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        sender_id:   currentDoctor.id,
-        receiver_id: selectedRequest.patient_id,
-        content
-      })
-    });
-    const data = await res.json();
-    if (data.success) {
-      document.getElementById('doctor-msg-input').value = '';
-      await loadDoctorMessages();
+    if (!currentDoctor.isDemo) {
+      await sendMessage(selectedRequest.id, currentDoctor.id, content);
     } else {
-      showToast(data.error || 'Failed to send', 'error');
+      const res = await fetch(`${API_BASE}/messages/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender_id: currentDoctor.id, receiver_id: selectedRequest.patient_id, content })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      await loadDoctorMessages();
     }
+    document.getElementById('doctor-msg-input').value = '';
   } catch(e) {
-    showToast('Network error: ' + e.message, 'error');
+    showToast('Error: ' + e.message, 'error');
   }
 }
 
 // ── LOGOUT ──
-function logout() {
+async function logout() {
+  const sb = getSupabase();
+  if (sb) { try { await sb.auth.signOut(); } catch(e){} }
+  if (activeChannel) activeChannel.unsubscribe();
+  if (consultChannel) consultChannel.unsubscribe();
   localStorage.removeItem('shecare_user');
   window.location.href = 'index.html';
 }
