@@ -333,14 +333,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 2. Fallback: localStorage
   const saved = localStorage.getItem('shecare_user');
-  if (!saved) { window.location.href = 'index.html'; return; }
+  if (!saved) { window.location.href = 'login.html'; return; }
   try {
     currentDoctor = JSON.parse(saved);
-    if (currentDoctor.role !== 'doctor') { window.location.href = 'dashboard.html'; return; }
+    if (currentDoctor.role !== 'doctor') { window.location.href = 'patient_dashboard.html'; return; }
     initUI();
   } catch(e) {
     localStorage.removeItem('shecare_user');
-    window.location.href = 'index.html';
+    window.location.href = 'login.html';
   }
 });
 
@@ -385,6 +385,9 @@ async function loadRequests() {
     document.getElementById('stat-total').textContent    = allRequests.length;
     document.getElementById('stat-pending').textContent  = allRequests.filter(r => r.status === 'pending').length;
     document.getElementById('stat-accepted').textContent = allRequests.filter(r => r.status === 'accepted').length;
+    // High risk count: computed after loading patient summaries asynchronously — set placeholder
+    document.getElementById('stat-high').textContent = '—';
+    updateHighRiskCount();
 
     renderRequestList();
   } catch(e) {
@@ -719,18 +722,52 @@ async function loadDoctorMessages(silent = false) {
 }
 
 function doctorAppendMsg(m, myId) {
-  const chatBox = document.getElementById('doctor-chat-box');
-  const isDoctor  = m.sender_id === myId;
-  const isPatient = !isDoctor;
-  const time    = new Date(m.created_at).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
-  const div     = document.createElement('div');
-  div.style.cssText = `display:flex;flex-direction:column;align-items:${isPatient ? 'flex-end' : 'flex-start'};`;
+  const chatBox  = document.getElementById('doctor-chat-box');
+  const isDoctor  = m.sender_id === myId;  // I (doctor) sent this
+  const isPatient = !isDoctor;              // Patient sent this
+  const time      = new Date(m.created_at).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+  const div       = document.createElement('div');
+  // Spec: doctor messages → LEFT (purple), patient messages → RIGHT (pink)
+  div.style.cssText = `display:flex;flex-direction:column;align-items:${isPatient ? 'flex-end' : 'flex-start'};margin-bottom:4px;`;
   div.innerHTML = `
     <div class="${isPatient ? 'msg-pink' : 'msg-purple'}">${m.content}</div>
     <div class="msg-time">${time}</div>
   `;
   chatBox.appendChild(div);
   chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+// ── HIGH RISK COUNT (async, after requests load) ──
+async function updateHighRiskCount() {
+  if (!allRequests.length) {
+    document.getElementById('stat-high').textContent = '0';
+    return;
+  }
+  // Count high-risk from accepted patients' health records
+  const acceptedIds = allRequests
+    .filter(r => r.status === 'accepted')
+    .map(r => r.patient_id)
+    .filter(Boolean);
+
+  if (!acceptedIds.length) {
+    document.getElementById('stat-high').textContent = '0';
+    return;
+  }
+
+  try {
+    const API = (window.SHECARE_CONFIG && window.SHECARE_CONFIG.apiBase) || 'http://localhost:5000';
+    let highCount = 0;
+    await Promise.all(acceptedIds.map(async (pid) => {
+      try {
+        const res     = await fetch(`${API}/health/history?user_id=${pid}`);
+        const records = await res.json();
+        if (records && records.length && records[0].risk === 2) highCount++;
+      } catch(e) {}
+    }));
+    document.getElementById('stat-high').textContent = highCount;
+  } catch(e) {
+    document.getElementById('stat-high').textContent = '?';
+  }
 }
 
 // ── SEND MESSAGE (doctor) ──
@@ -773,7 +810,7 @@ async function logout() {
   if (activeChannel) activeChannel.unsubscribe();
   if (consultChannel) consultChannel.unsubscribe();
   localStorage.removeItem('shecare_user');
-  window.location.href = 'index.html';
+  window.location.href = 'login.html';
 }
 
 // ── HELPERS ──

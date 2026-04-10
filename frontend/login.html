@@ -3,10 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SheCare AI – Redirecting…</title>
-  <meta http-equiv="refresh" content="0; url=login.html" />
-  <script>window.location.replace('login.html');</script>
-  <meta name="description" content="SheCare AI – AI-powered reproductive health assistant for PCOS risk prediction, health tracking, and doctor-ready reports." />
+  <title>SheCare AI – Login</title>
+  <meta name="description" content="SheCare AI – Sign in or create an account to access your AI-powered reproductive health assistant." />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link rel="stylesheet" href="styles.css" />
@@ -15,6 +13,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <script src="config.js"></script>
   <script src="supabaseClient.js"></script>
+  <script src="db.js"></script>
   <style>
     .auth-tab { padding:8px 20px; border-radius:50px; font-size:14px; font-weight:500; cursor:pointer; border:none; background:transparent; color:var(--text-mid); transition:all 0.2s; }
     .auth-tab.active { background:var(--pink-600); color:white; box-shadow:0 2px 10px rgba(201,75,106,0.3); }
@@ -25,6 +24,19 @@
     .input-group input { padding-left:42px; }
     .spinner-sm { width:16px; height:16px; border:2px solid rgba(255,255,255,0.4); border-top-color:white; border-radius:50%; animation:spin 0.7s linear infinite; display:inline-block; vertical-align:middle; margin-right:6px; }
     @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* Role selector */
+    .role-selector { display:flex; gap:8px; margin-bottom:14px; }
+    .role-btn {
+      flex:1; padding:10px 8px; border-radius:12px; font-size:13px; font-weight:600;
+      cursor:pointer; border:2px solid var(--border); background:white;
+      color:var(--text-mid); transition:all 0.2s; text-align:center;
+    }
+    .role-btn.active {
+      border-color:var(--pink-600); background:linear-gradient(135deg,#fff0f3,#ffe4ed);
+      color:var(--pink-600); box-shadow:0 2px 10px rgba(201,75,106,0.2);
+    }
+    .role-btn:hover:not(.active) { border-color:var(--pink-400); color:var(--pink-600); }
   </style>
 </head>
 <body>
@@ -68,6 +80,19 @@
 
     <!-- ── SIGN UP PANEL ── -->
     <div id="panel-signup" class="auth-panel active">
+      <!-- Role selector -->
+      <div style="margin-bottom:14px;">
+        <label class="form-label" style="margin-bottom:8px;display:block;">I am a</label>
+        <div class="role-selector">
+          <button type="button" id="role-patient" class="role-btn active" onclick="selectRole('patient')" aria-label="Sign up as patient">
+            🌸 Patient
+          </button>
+          <button type="button" id="role-doctor" class="role-btn" onclick="selectRole('doctor')" aria-label="Sign up as doctor">
+            🩺 Doctor
+          </button>
+        </div>
+      </div>
+
       <div class="input-group">
         <span class="input-icon">👤</span>
         <input type="text" id="signup-name" class="form-input" placeholder="Your full name" autocomplete="name" />
@@ -118,11 +143,15 @@
       Continue with Google
     </button>
 
-    <!-- Doctor Login Link -->
-    <div style="text-align:center;margin-top:16px;">
-      <button onclick="loginAsDoctor()"
-        style="background:none;border:none;cursor:pointer;font-size:13px;color:var(--pink-600);text-decoration:underline;font-weight:500;">
-        🩺 Login as Doctor (Demo)
+    <!-- Demo Login Buttons -->
+    <div style="text-align:center;margin-top:16px;display:flex;gap:8px;justify-content:center;">
+      <button onclick="demoPatientLogin()" id="btn-demo-patient"
+        style="background:linear-gradient(135deg,#fff0f3,#ffe4ed);border:1.5px solid var(--pink-400);border-radius:50px;cursor:pointer;font-size:12px;color:var(--pink-600);padding:6px 14px;font-weight:600;transition:all 0.2s;">
+        🌸 Demo Patient
+      </button>
+      <button onclick="demoDoctorLogin()" id="btn-demo-doctor"
+        style="background:linear-gradient(135deg,#f5f3ff,#ede9fe);border:1.5px solid #a78bfa;border-radius:50px;cursor:pointer;font-size:12px;color:#7c3aed;padding:6px 14px;font-weight:600;transition:all 0.2s;">
+        🩺 Demo Doctor
       </button>
     </div>
   </div>
@@ -168,6 +197,16 @@
 <div id="toast-container" class="toast-container"></div>
 
 <script>
+// ── State ──
+let selectedRole = 'patient';
+
+// ── Role selector ──
+function selectRole(role) {
+  selectedRole = role;
+  document.getElementById('role-patient').classList.toggle('active', role === 'patient');
+  document.getElementById('role-doctor').classList.toggle('active', role === 'doctor');
+}
+
 // ── Tab switching ──
 function switchAuthTab(tab) {
   ['signup','login'].forEach(t => {
@@ -207,24 +246,27 @@ window.addEventListener('DOMContentLoaded', async () => {
     try {
       const u = JSON.parse(saved);
       if (u.role === 'doctor') window.location.href = 'doctor_dashboard.html';
-      else                     window.location.href = 'dashboard.html';
+      else                     window.location.href = 'patient_dashboard.html';
     } catch(e) { localStorage.removeItem('shecare_user'); }
   }
 
   document.getElementById('signup-name').focus();
 });
 
-// ── Redirect by role ──
+// ── Redirect by role (CRITICAL FIX) ──
 async function redirectByRole(authUser) {
-  // Check users table for role
   const sb = getSupabase();
   if (sb) {
     try {
       const { data } = await sb.from('users').select('role').eq('id', authUser.id).single();
-      if (data?.role === 'doctor') { window.location.href = 'doctor_dashboard.html'; return; }
-    } catch(e) {}
+      if (data?.role === 'doctor') {
+        window.location.href = 'doctor_dashboard.html';
+        return;
+      }
+    } catch(e) { console.warn('Role fetch error:', e.message); }
   }
-  window.location.href = 'dashboard.html';
+  // Default patient redirect
+  window.location.href = 'patient_dashboard.html';
 }
 
 // ── SIGN UP ──
@@ -234,15 +276,14 @@ async function handleSignup() {
   const password = document.getElementById('signup-password').value;
   const age      = parseInt(document.getElementById('signup-age').value);
 
-  if (!name)                        { showToast('Please enter your name', 'error'); return; }
+  if (!name)                         { showToast('Please enter your name', 'error'); return; }
   if (!email || !email.includes('@')){ showToast('Please enter a valid email', 'error'); return; }
   if (!password || password.length < 6){ showToast('Password must be at least 6 characters', 'error'); return; }
-  if (!age || age < 10 || age > 65) { showToast('Please enter a valid age (10–65)', 'error'); return; }
+  if (!age || age < 10 || age > 65)  { showToast('Please enter a valid age (10–65)', 'error'); return; }
 
   const sb = getSupabase();
   if (!sb) {
-    // Demo fallback
-    demoLogin(name, email, age, 'patient');
+    demoFallback(name, email, age, selectedRole);
     return;
   }
 
@@ -251,7 +292,7 @@ async function handleSignup() {
     const { data, error } = await sb.auth.signUp({
       email, password,
       options: {
-        data: { full_name: name, age, role: 'patient' }
+        data: { full_name: name, age, role: selectedRole }
       }
     });
 
@@ -261,10 +302,12 @@ async function handleSignup() {
       // Email confirmation required
       showToast('✅ Account created! Check your email to confirm.', 'success');
     } else if (data.session) {
-      // Auto-confirmed
-      await upsertUser(data.user, 'patient');
-      showToast('🌸 Welcome to SheCare AI!', 'success');
-      setTimeout(() => window.location.href = 'dashboard.html', 800);
+      // Auto-confirmed — upsert user profile and redirect
+      await upsertUser(data.user, selectedRole);
+      showToast(selectedRole === 'doctor' ? '🩺 Welcome Dr. ' + name + '!' : '🌸 Welcome to SheCare AI!', 'success');
+      setTimeout(() => {
+        window.location.href = selectedRole === 'doctor' ? 'doctor_dashboard.html' : 'patient_dashboard.html';
+      }, 800);
     }
   } catch(e) {
     showToast(e.message || 'Signup failed', 'error');
@@ -283,7 +326,7 @@ async function handleLogin() {
 
   const sb = getSupabase();
   if (!sb) {
-    demoLogin('User', email, null, 'patient');
+    demoFallback('User', email, null, 'patient');
     return;
   }
 
@@ -311,7 +354,7 @@ async function loginWithGoogle() {
     const { error } = await sb.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: cfg.redirectBase + '/frontend/dashboard.html'
+        redirectTo: cfg.redirectBase + '/frontend/patient_dashboard.html'
       }
     });
     if (error) throw error;
@@ -320,22 +363,37 @@ async function loginWithGoogle() {
   }
 }
 
-// ── DOCTOR DEMO LOGIN ──
-function loginAsDoctor() {
-  const doctorUser = {
-    id: 'doctor-demo-' + Date.now(),
-    email: 'doctor@shecare.ai',
+// ── DEMO PATIENT LOGIN ──
+function demoPatientLogin() {
+  const user = {
+    id: 'demo-patient-' + Date.now(),
+    email: 'patient@shecare.demo',
+    name: 'Priya Demo',
+    age: 26,
+    role: 'patient',
+    isDemo: true
+  };
+  localStorage.setItem('shecare_user', JSON.stringify(user));
+  showToast('🌸 Loading Demo Patient…', 'success');
+  setTimeout(() => window.location.href = 'patient_dashboard.html', 700);
+}
+
+// ── DEMO DOCTOR LOGIN ──
+function demoDoctorLogin() {
+  const user = {
+    id: 'demo-doctor-' + Date.now(),
+    email: 'doctor@shecare.demo',
     name: 'Dr. Priya Sharma',
     role: 'doctor',
     isDemo: true
   };
-  localStorage.setItem('shecare_user', JSON.stringify(doctorUser));
-  showToast('🩺 Logging in as Doctor…', 'success');
+  localStorage.setItem('shecare_user', JSON.stringify(user));
+  showToast('🩺 Loading Demo Doctor…', 'success');
   setTimeout(() => window.location.href = 'doctor_dashboard.html', 700);
 }
 
 // ── DEMO FALLBACK (no Supabase key) ──
-function demoLogin(name, email, age, role) {
+function demoFallback(name, email, age, role) {
   const user = {
     id: (role === 'doctor' ? 'demo-doc-' : 'demo-') + Date.now(),
     email, name, age, role, isDemo: true
@@ -343,7 +401,7 @@ function demoLogin(name, email, age, role) {
   localStorage.setItem('shecare_user', JSON.stringify(user));
   showToast('🌸 Welcome (Demo Mode)!', 'success');
   setTimeout(() => {
-    window.location.href = role === 'doctor' ? 'doctor_dashboard.html' : 'dashboard.html';
+    window.location.href = role === 'doctor' ? 'doctor_dashboard.html' : 'patient_dashboard.html';
   }, 700);
 }
 

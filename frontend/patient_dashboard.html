@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Patient Dashboard – SheCare AI</title>
+  <meta name="description" content="SheCare AI patient dashboard – track symptoms, view PCOS risk analysis, and connect with doctors."/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="styles.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <script src="config.js"></script>
+  <script src="supabaseClient.js"></script>
+  <script src="db.js"></script>
+  <style>
+    .risk-bar-track { height: 10px; border-radius: 8px; background: #f9d0dc; overflow: hidden; }
+    .risk-bar-fill  { height: 100%; border-radius: 8px; transition: width 0.9s cubic-bezier(.4,0,.2,1); }
+
+    .tab-btn { padding: 8px 20px; border-radius: 50px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; border: none; background: transparent; color: var(--text-mid); }
+    .tab-btn.active { background: var(--pink-600); color: white; box-shadow: 0 2px 10px rgba(201,75,106,0.35); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; animation: fadeInUp 0.35s ease; }
+
+    .gauge-svg { overflow: visible; }
+
+    .doctor-card { border: 1.5px solid var(--border); border-radius: 16px; padding: 16px; background: white; cursor: pointer; transition: all 0.2s; }
+    .doctor-card:hover { border-color: var(--pink-400); box-shadow: 0 4px 16px rgba(200,80,110,.12); transform: translateY(-1px); }
+
+    .hist-row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .hist-row:last-child { border-bottom: none; }
+
+    .result-sticky { position: sticky; top: 80px; }
+
+    .report-item { border: 1.5px solid var(--border); border-radius: 12px; padding: 12px 16px; background: white; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .report-item:hover { border-color: var(--pink-400); box-shadow: 0 2px 8px rgba(200,80,110,.08); }
+
+    .chat-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-light); margin-bottom: 8px; }
+    .chat-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #16a34a; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  </style>
+</head>
+<body>
+
+<!-- ======================================== -->
+<!-- NAVBAR                                   -->
+<!-- ======================================== -->
+<nav class="navbar" id="main-navbar">
+  <a href="#" class="navbar-logo">
+    <div style="width:34px;height:34px;background:linear-gradient(135deg,#f4778a,#c94b6a);border-radius:50%;display:flex;align-items:center;justify-content:center;">
+      <svg width="18" height="18" viewBox="0 0 48 48" fill="none"><path d="M24 4C20 4 16 6 14 10C12 14 12 18 14 22C16 14 20 10 24 8C28 10 32 14 34 22C36 18 36 14 34 10C32 6 28 4 24 4Z" fill="white" opacity="0.9"/><path d="M24 8C20 12 14 20 14 28C14 36 18 42 24 44C30 42 34 36 34 28C34 20 28 12 24 8Z" fill="white" opacity="0.75"/></svg>
+    </div>
+    <span class="logo-name">SheCare AI</span>
+  </a>
+
+  <div class="nav-links" id="nav-links">
+    <a href="#" class="nav-link active" onclick="switchTab('symptoms');return false;">Dashboard</a>
+    <a href="#" class="nav-link" onclick="switchTab('history');return false;">History</a>
+    <a href="#" class="nav-link" onclick="switchTab('reports');return false;">Reports</a>
+    <a href="#" class="nav-link" onclick="switchTab('doctors');return false;">Doctors</a>
+    <a href="#" class="nav-link" onclick="switchTab('messages');return false;">Messages</a>
+  </div>
+
+  <div class="nav-user">
+    <div class="avatar" id="nav-avatar" title="Profile">?</div>
+    <span id="nav-name" style="font-size:14px;font-weight:500;color:var(--text-mid);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+    <button id="btn-logout" onclick="logout()" style="margin-left:8px;font-size:12px;color:var(--text-light);background:none;border:none;cursor:pointer;text-decoration:underline;">Logout</button>
+  </div>
+</nav>
+
+<!-- ======================================== -->
+<!-- MAIN CONTENT                             -->
+<!-- ======================================== -->
+<div class="dashboard-grid" id="app-grid">
+
+  <!-- LEFT COL: SYMPTOM FORM + TABS -->
+  <div class="dashboard-col-left">
+
+    <!-- Welcome card -->
+    <div class="card mb-5 fade-in-up" style="animation-delay:0s;background:linear-gradient(135deg,#fff0f3,#ffe4ed);">
+      <h1 class="serif text-xl font-bold" style="color:var(--text-dark);">Welcome, <span id="welcome-name" style="color:var(--pink-600);">—</span> 🌸</h1>
+      <p style="font-size:14px;color:var(--text-mid);margin-top:4px;">Track your symptoms to monitor your reproductive health</p>
+    </div>
+
+    <!-- Tab Buttons -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;">
+      <button id="tab-symptoms" class="tab-btn active" onclick="switchTab('symptoms')">📋 Symptoms</button>
+      <button id="tab-history"  class="tab-btn" onclick="switchTab('history')">📊 History</button>
+      <button id="tab-reports"  class="tab-btn" onclick="switchTab('reports')">📄 Reports</button>
+      <button id="tab-doctors"  class="tab-btn" onclick="switchTab('doctors')">👩‍⚕️ Doctors</button>
+      <button id="tab-messages" class="tab-btn" onclick="switchTab('messages')">💬 Messages</button>
+    </div>
+
+    <!-- ═══ TAB: SYMPTOMS FORM ═══ -->
+    <div id="panel-symptoms" class="tab-panel active">
+      <div class="card fade-in-up" style="animation-delay:0.1s;">
+        <h2 class="serif" style="font-size:17px;font-weight:700;color:var(--text-dark);margin-bottom:18px;">Enter Your Symptoms</h2>
+
+        <!-- Cycle Length -->
+        <div style="margin-bottom:16px;">
+          <label class="form-label" for="cycle_length">Cycle Length (days)</label>
+          <select id="cycle_length" class="form-input">
+            <option value="">Select cycle length</option>
+            <option value="21">21 days</option>
+            <option value="24">24 days</option>
+            <option value="28">28 days (Normal)</option>
+            <option value="30">30 days</option>
+            <option value="35">35 days</option>
+            <option value="40">40 days</option>
+            <option value="45">45 days</option>
+            <option value="50">50+ days</option>
+          </select>
+        </div>
+
+        <!-- Pain Level -->
+        <div style="margin-bottom:16px;">
+          <label class="form-label">Pain Level: <strong id="pain-val" style="color:var(--pink-600);">5</strong> / 10</label>
+          <input type="range" id="pain_level" min="1" max="10" value="5" oninput="document.getElementById('pain-val').textContent=this.value"/>
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-light);margin-top:4px;">
+            <span>Mild (1)</span><span>Moderate (5)</span><span>Severe (10)</span>
+          </div>
+        </div>
+
+        <!-- Boolean symptom chips -->
+        <div style="margin-bottom:16px;">
+          <label class="form-label">Symptoms (tap to select)</label>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;">
+            <span class="symptom-tag" id="chip-irregular_periods" onclick="toggleChip('irregular_periods')">🔄 Irregular Periods</span>
+            <span class="symptom-tag" id="chip-weight_gain"        onclick="toggleChip('weight_gain')">⚖️ Weight Gain</span>
+            <span class="symptom-tag" id="chip-acne"               onclick="toggleChip('acne')">🌡️ Acne</span>
+            <span class="symptom-tag" id="chip-hair_growth"        onclick="toggleChip('hair_growth')">🧔 Excessive Hair Growth</span>
+            <span class="symptom-tag" id="chip-skin_darkening"     onclick="toggleChip('skin_darkening')">🫧 Skin Darkening</span>
+            <span class="symptom-tag" id="chip-fast_food"          onclick="toggleChip('fast_food')">🍔 Regular Fast Food</span>
+          </div>
+        </div>
+
+        <!-- Analyze button -->
+        <button id="btn-analyze" class="btn-pink w-full" style="justify-content:center;font-size:15px;padding:14px 24px;" onclick="submitPrediction()">
+          <span id="btn-analyze-txt">🔍 Analyze My Symptoms</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ═══ TAB: HISTORY ═══ -->
+    <div id="panel-history" class="tab-panel">
+      <div class="card fade-in-up">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h2 class="serif" style="font-size:17px;font-weight:700;color:var(--text-dark);">Symptom History</h2>
+          <button class="btn-outline-pink" style="padding:6px 14px;font-size:13px;" onclick="loadHistory()">↺ Refresh</button>
+        </div>
+        <!-- Risk Trend Chart -->
+        <div style="margin-bottom: 24px; padding: 16px; background: #fff5f7; border-radius: 16px; border: 1px dashed var(--pink-400);">
+          <h3 class="serif" style="font-size:15px; font-weight:700; color:var(--text-dark); margin-bottom:12px;">📈 Your Health Risk Trend</h3>
+          <div style="height: 200px; position: relative;">
+            <canvas id="riskTrendChart"></canvas>
+            <div id="no-history-msg" style="display:none; position:absolute; inset:0; flex-direction:column; align-items:center; justify-content:center; color:var(--text-light); font-size:13px;">
+              <p>No history available yet</p>
+            </div>
+          </div>
+        </div>
+        <div id="history-list">
+          <p style="color:var(--text-light);font-size:14px;text-align:center;padding:24px 0;">Loading history...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ TAB: REPORTS ═══ -->
+    <div id="panel-reports" class="tab-panel">
+      <div class="card fade-in-up">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h2 class="serif" style="font-size:17px;font-weight:700;color:var(--text-dark);">My Reports</h2>
+          <button class="btn-outline-pink" style="padding:6px 14px;font-size:13px;" onclick="loadReportsList()">↺ Refresh</button>
+        </div>
+        <div id="reports-list">
+          <p style="color:var(--text-light);font-size:14px;text-align:center;padding:24px 0;">Loading reports...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ TAB: DOCTORS ═══ -->
+    <div id="panel-doctors" class="tab-panel">
+      <div class="card fade-in-up">
+        <h2 class="serif" style="font-size:17px;font-weight:700;color:var(--text-dark);margin-bottom:4px;">Available Doctors</h2>
+        <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;">Send a consultation request to get expert advice</p>
+        <div id="doctors-list">
+          <p style="color:var(--text-light);font-size:14px;text-align:center;padding:24px 0;">Loading doctors...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ TAB: MESSAGES ═══ -->
+    <div id="panel-messages" class="tab-panel">
+      <div class="card fade-in-up">
+        <h2 class="serif" style="font-size:17px;font-weight:700;color:var(--text-dark);margin-bottom:4px;">Messages</h2>
+        <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;">Chat with your doctor</p>
+
+        <!-- Consultation status banner -->
+        <div id="chat-status-banner" style="display:none;padding:10px 14px;border-radius:10px;margin-bottom:12px;font-size:13px;font-weight:500;"></div>
+
+        <!-- Doctor selector for demo mode -->
+        <div id="msg-doctor-selector" style="margin-bottom:12px;display:none;">
+          <label class="form-label">Select Doctor to Message</label>
+          <select id="msg-doctor-select" class="form-input" onchange="loadMessages()">
+            <option value="">— choose doctor —</option>
+          </select>
+        </div>
+
+        <!-- Chat status indicator -->
+        <div class="chat-status" id="chat-connection-status">
+          <div class="chat-status-dot"></div>
+          <span>Connected</span>
+        </div>
+
+        <div class="chat-container" id="chat-box">
+          <div style="text-align:center;padding:32px 0;">
+            <p style="font-size:24px;margin-bottom:6px;">💬</p>
+            <p style="color:var(--text-light);font-size:13px;">Messages will appear here once connected</p>
+          </div>
+        </div>
+        <div class="chat-input-wrap">
+          <input type="text" id="msg-input" class="form-input" placeholder="Type a message…" onkeydown="if(event.key==='Enter')handleSendMessage()"/>
+          <button id="btn-send-message" class="btn-pink" style="padding:11px 18px;" onclick="handleSendMessage()">Send</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /left col -->
+
+  <!-- RIGHT COL: RISK ANALYSIS PANEL -->
+  <div class="dashboard-col-right result-sticky">
+
+    <div class="card fade-in-up" style="animation-delay:0.15s;" id="risk-panel">
+      <h2 class="serif" style="font-size:16px;font-weight:700;color:var(--text-dark);margin-bottom:16px;">Risk Analysis</h2>
+
+      <!-- Default empty state -->
+      <div id="risk-empty" style="text-align:center;padding:32px 0;">
+        <div style="font-size:48px;margin-bottom:12px;">🩺</div>
+        <p style="color:var(--text-mid);font-size:14px;">Submit your symptoms to see<br/>your PCOS risk analysis</p>
+      </div>
+
+      <!-- Result state (hidden until prediction) -->
+      <div id="risk-result" style="display:none;" class="result-section">
+
+        <!-- Risk label -->
+        <div style="text-align:center;margin-bottom:16px;">
+          <p style="font-size:13px;color:var(--text-light);margin-bottom:2px;">PCOS &amp; Related Disorders</p>
+          <h3 id="risk-label-text" class="serif" style="font-size:22px;font-weight:700;color:var(--pink-600);">—</h3>
+        </div>
+
+        <!-- Gauge -->
+        <div class="gauge-wrapper" style="margin-bottom:20px;">
+          <svg width="200" height="110" viewBox="0 0 200 110" class="gauge-svg">
+            <path d="M20,100 A80,80 0 0,1 180,100" fill="none" stroke="#f9d0dc" stroke-width="14" stroke-linecap="round"/>
+            <path id="gauge-arc" d="M20,100 A80,80 0 0,1 180,100" fill="none" stroke="#c94b6a" stroke-width="14" stroke-linecap="round"
+                  stroke-dasharray="251" stroke-dashoffset="251"
+                  style="transition: stroke-dashoffset 1s cubic-bezier(.4,0,.2,1), stroke 0.5s ease;"/>
+            <text x="100" y="92" text-anchor="middle" font-family="Playfair Display,serif" font-size="26" font-weight="700" fill="#3b1a2e" id="gauge-pct">—</text>
+            <text x="100" y="108" text-anchor="middle" font-family="DM Sans,sans-serif" font-size="11" fill="#b07090">Risk Score</text>
+          </svg>
+          <div class="gauge-label-row">
+            <span>Low</span>
+            <span>Moderate</span>
+            <span>High</span>
+          </div>
+        </div>
+
+        <!-- Risk progress bar -->
+        <div class="risk-bar-track" style="margin-bottom:20px;">
+          <div id="risk-bar" class="risk-bar-fill" style="width:0%;background:linear-gradient(90deg,#f4778a,#c94b6a);"></div>
+        </div>
+
+        <!-- Reasons list -->
+        <div style="margin-bottom:20px;">
+          <p style="font-size:13px;font-weight:600;color:var(--text-dark);margin-bottom:8px;">🔍 Key Findings</p>
+          <ul id="reasons-list" style="list-style:none;display:flex;flex-direction:column;gap:6px;"></ul>
+        </div>
+
+        <!-- Suggestion -->
+        <div id="suggestion-box" style="border-radius:12px;padding:12px 16px;margin-bottom:20px;font-size:13px;font-weight:500;"></div>
+
+        <!-- Report + Appointment buttons -->
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <button id="btn-report" class="btn-pink w-full" style="justify-content:center;" onclick="downloadReport()">
+            <span id="btn-report-txt">📄 Download PDF Report</span>
+          </button>
+          <button id="btn-book-appointment" class="btn-outline-pink w-full" style="justify-content:center;" onclick="switchTab('doctors')">
+            🏥 Book Appointment
+          </button>
+        </div>
+
+        <!-- What-If Simulation -->
+        <div id="simulation-box" style="margin-top:20px; border: 1.5px dashed var(--mauve); border-radius: 16px; padding: 16px; background: #fdf2f8;">
+          <h3 class="serif" style="font-size:14px; font-weight:700; color:var(--mauve); display:flex; align-items:center; gap:6px;">
+            ✨ What happens if you improve?
+          </h3>
+          <p style="font-size:12px; color:var(--text-mid); margin: 6px 0 12px;">See how reducing weight gain and fast food affects your risk.</p>
+          <button id="btn-simulate" class="btn-outline-pink w-full" style="font-size:13px; padding: 8px; border-color: var(--mauve); color: var(--mauve);" onclick="runSimulation()">
+            Run Improvement Sim
+          </button>
+          <div id="sim-result" style="display:none; margin-top:12px; padding:10px; border-radius:10px; background:white; font-size:12px; font-weight:600; text-align:center; border: 1px solid var(--mauve); animation: fadeInUp 0.3s ease;">
+          </div>
+        </div>
+      </div>
+    </div><!-- /risk-panel -->
+
+  </div><!-- /right col -->
+</div><!-- /dashboard-grid -->
+
+<!-- Footer Disclaimer -->
+<footer style="padding: 24px; text-align: center; color: var(--text-light); font-size: 13px;">
+  <p>"This system does not provide medical diagnosis. It assists in early risk detection."</p>
+</footer>
+
+<!-- Toast -->
+<div id="toast-container" class="toast-container"></div>
+
+<script>
+// ── Config ──
+const API_BASE = (window.SHECARE_CONFIG && window.SHECARE_CONFIG.apiBase) || 'http://localhost:5000';
+
+// ── State ──
+let currentUser     = null;
+let lastResult      = null;
+let chipState       = { irregular_periods:0, weight_gain:0, acne:0, hair_growth:0, skin_darkening:0, fast_food:0 };
+let riskChart       = null;
+let activeChannel   = null;
+let activeConsultId = null;
+let chatPollTimer   = null;
+
+// ── Auth Guard + Init ──
+document.addEventListener('DOMContentLoaded', async () => {
+  const sb = getSupabase();
+  if (sb) {
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) {
+        const dbUser = await getUserData(session.user.id);
+        currentUser = {
+          id:    session.user.id,
+          email: session.user.email,
+          name:  dbUser?.name || session.user.user_metadata?.full_name || session.user.email.split('@')[0],
+          age:   dbUser?.age,
+          role:  dbUser?.role || 'patient'
+        };
+        // Guard: redirect doctors away
+        if (currentUser.role === 'doctor') {
+          window.location.href = 'doctor_dashboard.html';
+          return;
+        }
+        localStorage.setItem('shecare_user', JSON.stringify(currentUser));
+        initUI();
+        return;
+      }
+    } catch(e) { console.warn('Supabase session check:', e.message); }
+  }
+
+  // Fallback: localStorage
+  const saved = localStorage.getItem('shecare_user');
+  if (!saved) { window.location.href = 'login.html'; return; }
+  try {
+    currentUser = JSON.parse(saved);
+    if (currentUser.role === 'doctor') { window.location.href = 'doctor_dashboard.html'; return; }
+    initUI();
+  } catch(e) {
+    localStorage.removeItem('shecare_user');
+    window.location.href = 'login.html';
+  }
+});
+
+function initUI() {
+  const initials = (currentUser.name || 'U').charAt(0).toUpperCase();
+  document.getElementById('nav-avatar').textContent   = initials;
+  document.getElementById('nav-name').textContent     = currentUser.name || currentUser.email || 'User';
+  document.getElementById('welcome-name').textContent = (currentUser.name || 'friend').split(' ')[0];
+}
+
+// ── Tab switching ──
+function switchTab(tab) {
+  ['symptoms','history','reports','doctors','messages'].forEach(t => {
+    document.getElementById('panel-'+t).classList.remove('active');
+    document.getElementById('tab-'+t).classList.remove('active');
+    const navLink = document.querySelector(`.nav-link[onclick*="${t}"]`);
+    if (navLink) navLink.classList.remove('active');
+  });
+  document.getElementById('panel-'+tab).classList.add('active');
+  document.getElementById('tab-'+tab).classList.add('active');
+  const navLink = document.querySelector(`.nav-link[onclick*="${tab}"]`);
+  if (navLink) navLink.classList.add('active');
+
+  if (tab === 'history')  loadHistory();
+  if (tab === 'reports')  loadReportsList();
+  if (tab === 'doctors')  loadDoctors();
+  if (tab === 'messages') initMessages();
+}
+
+// ── Chip toggle ──
+function toggleChip(key) {
+  chipState[key] = chipState[key] === 1 ? 0 : 1;
+  const el = document.getElementById('chip-'+key);
+  if (chipState[key] === 1) el.classList.add('selected');
+  else el.classList.remove('selected');
+}
+
+// ── PREDICTION ──
+async function submitPrediction() {
+  const cycleLengthEl = document.getElementById('cycle_length');
+  const cycle_length  = cycleLengthEl.value;
+
+  if (!cycle_length) {
+    showToast('Please select your cycle length', 'error');
+    cycleLengthEl.focus();
+    return;
+  }
+
+  const pain_level = parseInt(document.getElementById('pain_level').value);
+  const btn    = document.getElementById('btn-analyze');
+  const btnTxt = document.getElementById('btn-analyze-txt');
+  btn.disabled = true;
+  btnTxt.innerHTML = '<span class="spinner"></span> Analyzing…';
+  window.predictionStart = performance.now();
+
+  const payload = {
+    user_id:           currentUser.id,
+    cycle_length:      parseInt(cycle_length),
+    pain_level,
+    irregular_periods: chipState.irregular_periods,
+    weight_gain:       chipState.weight_gain,
+    acne:              chipState.acne,
+    hair_growth:       chipState.hair_growth,
+    skin_darkening:    chipState.skin_darkening,
+    fast_food:         chipState.fast_food
+  };
+
+  try {
+    const res  = await fetch(`${API_BASE}/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error(`Server error: ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    lastResult = { ...payload, ...data, name: currentUser.name, age: currentUser.age || '—' };
+    renderResult(data);
+
+    // Save to Supabase
+    if (!currentUser.isDemo) {
+      await saveHealthData(currentUser.id, lastResult);
+    }
+
+    showToast('✅ Analysis complete!', 'success');
+
+    // Auto-navigate to doctors on high risk
+    if (data.risk === 2) {
+      setTimeout(() => showToast('⚠️ High risk detected — consider consulting a doctor', 'error'), 1500);
+    }
+  } catch(e) {
+    showToast('Analysis error: ' + e.message, 'error');
+    console.error('[Predict]', e);
+  } finally {
+    btn.disabled = false;
+    btnTxt.innerHTML = '🔍 Analyze My Symptoms';
+    document.getElementById('sim-result').style.display = 'none';
+  }
+}
+
+// ── WHAT-IF SIMULATION ──
+async function runSimulation() {
+  if (!lastResult) {
+    showToast('Submit symptoms first to simulate improvements', 'info');
+    return;
+  }
+
+  const simBtn = document.getElementById('btn-simulate');
+  const originalTxt = simBtn.innerHTML;
+  simBtn.disabled = true;
+  simBtn.innerHTML = '<span class="spinner" style="border-top-color:var(--mauve); width:14px; height:14px;"></span> Calculating…';
+
+  const simPayload = {
+    ...lastResult,
+    user_id:     'demo-sim-' + Date.now(),
+    weight_gain: 0,
+    fast_food:   0
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(simPayload)
+    });
+    const data = await res.json();
+
+    const display = document.getElementById('sim-result');
+    display.style.display = 'block';
+
+    if (data.risk < lastResult.risk) {
+      display.innerHTML = `🌟 Your risk could drop to <strong>${data.risk_label}</strong>!`;
+      display.style.color = '#16a34a';
+    } else if (data.score < lastResult.score) {
+      display.innerHTML = `📈 Risk score could decrease from ${lastResult.score} to ${data.score}.`;
+      display.style.color = '#0891b2';
+    } else {
+      display.innerHTML = `ℹ️ Small changes detected. Focus on multiple habits for a bigger impact.`;
+      display.style.color = 'var(--text-mid)';
+    }
+  } catch(e) {
+    showToast('Simulation failed: ' + e.message, 'error');
+  } finally {
+    simBtn.disabled = false;
+    simBtn.innerHTML = originalTxt;
+  }
+}
+
+// ── RENDER RESULT ──
+function renderResult(data) {
+  const { risk, score, reasons, suggestion, risk_label, risk_percent, explanation } = data;
+
+  document.getElementById('risk-empty').style.display  = 'none';
+  document.getElementById('risk-result').style.display = 'block';
+
+  const colors      = { 0: '#16a34a', 1: '#c94b6a', 2: '#dc2626' };
+  const riskColor   = colors[risk] || '#c94b6a';
+
+  document.getElementById('risk-label-text').textContent = risk_label;
+  document.getElementById('risk-label-text').style.color = riskColor;
+
+  // Gauge arc
+  const offset = 251 - (risk_percent / 100) * 251;
+  const arc    = document.getElementById('gauge-arc');
+  arc.style.stroke = riskColor;
+  setTimeout(() => { arc.setAttribute('stroke-dashoffset', offset); }, 50);
+  document.getElementById('gauge-pct').textContent = risk_percent + '%';
+
+  // Bar
+  setTimeout(() => {
+    document.getElementById('risk-bar').style.width = risk_percent + '%';
+    document.getElementById('risk-bar').style.background = risk === 0
+      ? 'linear-gradient(90deg,#4ade80,#16a34a)'
+      : risk === 1
+      ? 'linear-gradient(90deg,#f4778a,#c94b6a)'
+      : 'linear-gradient(90deg,#f87171,#dc2626)';
+  }, 50);
+
+  // ── Key Findings with contribution percentages (from backend explanation field) ──
+  const ul = document.getElementById('reasons-list');
+  ul.innerHTML = '';
+
+  if (explanation && explanation.length > 0) {
+    explanation.forEach(item => {
+      const li = document.createElement('li');
+      li.style.cssText = 'margin-bottom:8px;';
+      li.innerHTML = `
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-mid);margin-bottom:3px;">
+          <span>${item.factor}</span>
+          <span style="font-weight:600;">${item.contribution}%</span>
+        </div>
+        <div style="height:6px;background:#f9d0dc;border-radius:10px;overflow:hidden;">
+          <div style="height:100%;width:${item.contribution}%;background:${riskColor};border-radius:10px;transition:width 0.6s ease;"></div>
+        </div>
+      `;
+      ul.appendChild(li);
+    });
+  } else if (score === 0) {
+    ul.innerHTML = '<li style="font-size:13px;color:#16a34a;">✓ No significant risk factors detected</li>';
+  } else if (reasons && reasons.length > 0) {
+    reasons.forEach(r => {
+      const li = document.createElement('li');
+      li.style.cssText = 'font-size:13px;color:var(--text-mid);padding:4px 0;border-bottom:1px solid var(--border);';
+      li.textContent = '• ' + r;
+      ul.appendChild(li);
+    });
+  }
+
+  // Suggestion
+  const box = document.getElementById('suggestion-box');
+  const suggBg  = { 0: '#dcfce7', 1: '#fff7ed', 2: '#fee2e2' };
+  const suggClr = { 0: '#166534', 1: '#92400e', 2: '#991b1b' };
+  box.style.background = suggBg[risk];
+  box.style.color      = suggClr[risk];
+  box.innerHTML = `<strong>💡 Recommendation:</strong><br/>${suggestion}`;
+
+  // Performance timing
+  if (window.predictionStart) {
+    const duration = Math.round(performance.now() - window.predictionStart);
+    console.log(`[Predict] ⚡ ${duration}ms`);
+    window.predictionStart = null;
+  }
+}
+
+// ── DOWNLOAD PDF REPORT ──
+async function downloadReport() {
+  if (!lastResult) { showToast('Please run an analysis first', 'error'); return; }
+
+  const btn = document.getElementById('btn-report');
+  const txt = document.getElementById('btn-report-txt');
+  btn.disabled = true;
+  txt.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;margin-right:6px;"></span> Generating...';
+
+  const payload = {
+    user_id:    currentUser.id,
+    name:       currentUser.name || 'Patient',
+    age:        currentUser.age  || 'N/A',
+    risk:       lastResult.risk,
+    score:      lastResult.score,
+    reasons:    lastResult.reasons,
+    explanation:lastResult.explanation || [],
+    suggestion: lastResult.suggestion,
+    symptoms: {
+      cycle_length:      lastResult.cycle_length,
+      pain_level:        lastResult.pain_level,
+      irregular_periods: lastResult.irregular_periods,
+      weight_gain:       lastResult.weight_gain,
+      acne:              lastResult.acne,
+      hair_growth:       lastResult.hair_growth,
+      skin_darkening:    lastResult.skin_darkening,
+      fast_food:         lastResult.fast_food
+    }
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/generate-report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('Report generation failed');
+
+    const blob = await res.blob();
+
+    // Upload to Supabase Storage
+    let pdfUrl = null;
+    if (!currentUser.isDemo) {
+      pdfUrl = await uploadPDF(blob, currentUser.id);
+    }
+
+    // Save report metadata
+    if (!currentUser.isDemo) {
+      await saveReport(currentUser.id, {
+        risk_level: lastResult.risk_label,
+        risk_score: lastResult.score,
+        summary:    lastResult.suggestion,
+        pdf_url:    pdfUrl || null
+      });
+    }
+
+    // Download for user
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `shecare_report_${(currentUser.name || 'patient').replace(/\s+/g,'_')}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showToast('✅ Report generated & saved!', 'success');
+    // Reload reports tab
+    if (document.getElementById('panel-reports').classList.contains('active')) {
+      loadReportsList();
+    }
+  } catch(e) {
+    showToast('Report error: ' + e.message, 'error');
+    console.error('[Report]', e);
+  } finally {
+    btn.disabled = false;
+    txt.innerHTML = '📄 Download PDF Report';
+  }
+}
+
+// ── LOAD HISTORY ──
+async function loadHistory() {
+  const container = document.getElementById('history-list');
+  container.innerHTML = '<div style="text-align:center;padding:32px 0;"><span class="spinner" style="border-top-color:var(--pink-600);width:24px;height:24px;"></span></div>';
+
+  try {
+    let data = [];
+    if (!currentUser.isDemo) {
+      data = await getHealthHistory(currentUser.id);
+    }
+    if (!data || !data.length) {
+      const res = await fetch(`${API_BASE}/health/history?user_id=${currentUser.id}`);
+      data = await res.json();
+    }
+
+    if (!data || !data.length) {
+      container.innerHTML = `
+        <div style="text-align:center;padding:40px 24px;">
+          <div style="font-size:48px;margin-bottom:12px;opacity:0.5;">📈</div>
+          <p style="color:var(--text-dark);font-size:15px;font-weight:600;">No health records yet</p>
+          <p style="color:var(--text-light);font-size:13px;margin-top:4px;">Submit your symptoms to start tracking.</p>
+        </div>`;
+      document.getElementById('no-history-msg').style.display = 'flex';
+      if (riskChart) riskChart.destroy();
+      return;
+    }
+    document.getElementById('no-history-msg').style.display = 'none';
+    renderRiskChart(data);
+
+    const riskLabels = { 0: 'Low', 1: 'Moderate', 2: 'High' };
+    const riskBadge  = { 0: 'badge-low', 1: 'badge-moderate', 2: 'badge-high' };
+
+    container.innerHTML = data.map(r => `
+      <div class="hist-row">
+        <div>
+          <p style="font-size:13px;font-weight:600;color:var(--text-dark);">Cycle: ${r.cycle_length} days · Pain: ${r.pain_level}/10</p>
+          <p style="font-size:11px;color:var(--text-light);margin-top:2px;">${new Date(r.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</p>
+        </div>
+        <span class="badge ${riskBadge[r.risk] || 'badge-moderate'}">${riskLabels[r.risk] || '—'}</span>
+        <span style="font-size:12px;color:var(--text-light);">Score: ${r.score}</span>
+      </div>
+    `).join('');
+  } catch(e) {
+    container.innerHTML = `<div style="text-align:center;padding:24px;background:#fee2e2;border-radius:12px;color:#dc2626;font-size:13px;">❌ Error: ${e.message}</div>`;
+  }
+}
+
+// ── RENDER RISK CHART ──
+function renderRiskChart(data) {
+  const ctx    = document.getElementById('riskTrendChart').getContext('2d');
+  const sorted = [...data].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const labels = sorted.map(r => new Date(r.created_at).toLocaleDateString('en-IN', { day:'numeric', month:'short' }));
+  const scores = sorted.map(r => r.score);
+
+  if (riskChart) riskChart.destroy();
+
+  const gradient = ctx.createLinearGradient(0, 0, 0, 200);
+  gradient.addColorStop(0, 'rgba(201, 75, 106, 0.3)');
+  gradient.addColorStop(1, 'rgba(201, 75, 106, 0)');
+
+  riskChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Risk Score',
+        data: scores,
+        borderColor: '#c94b6a',
+        backgroundColor: gradient,
+        borderWidth: 3,
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#fff',
+        pointBorderColor: '#c94b6a',
+        pointBorderWidth: 2,
+        pointRadius: 4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, max: 13, ticks: { stepSize: 2 } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ── LOAD REPORTS LIST ──
+async function loadReportsList() {
+  const container = document.getElementById('reports-list');
+  container.innerHTML = '<div style="text-align:center;padding:24px 0;"><span class="spinner" style="border-top-color:var(--pink-600);width:20px;height:20px;"></span></div>';
+
+  try {
+    let reports = [];
+    if (!currentUser.isDemo) {
+      reports = await getReports(currentUser.id);
+    }
+
+    if (!reports || !reports.length) {
+      container.innerHTML = `
+        <div style="text-align:center;padding:40px 24px;">
+          <div style="font-size:48px;margin-bottom:12px;opacity:0.5;">📄</div>
+          <p style="color:var(--text-dark);font-size:15px;font-weight:600;">No reports yet</p>
+          <p style="color:var(--text-light);font-size:13px;margin-top:4px;">Generate a report after analyzing your symptoms.</p>
+          <button class="btn-pink" style="margin-top:16px;padding:10px 20px;font-size:13px;" onclick="switchTab('symptoms')">
+            📋 Go Analyze Symptoms
+          </button>
+        </div>`;
+      return;
+    }
+
+    const riskBadge = { 'Low Risk': 'badge-low', 'Moderate Risk': 'badge-moderate', 'High Risk': 'badge-high' };
+
+    container.innerHTML = reports.map(r => `
+      <div class="report-item">
+        <div>
+          <p style="font-size:14px;font-weight:600;color:var(--text-dark);">
+            ${new Date(r.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}
+          </p>
+          <p style="font-size:12px;color:var(--text-light);margin-top:2px;">Score: ${r.risk_score ?? '—'}</p>
+          ${r.summary ? `<p style="font-size:12px;color:var(--text-mid);margin-top:4px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${r.summary}</p>` : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="badge ${riskBadge[r.risk_level] || 'badge-moderate'}">${r.risk_level || '—'}</span>
+          ${r.pdf_url
+            ? `<a href="${r.pdf_url}" target="_blank" class="btn-outline-pink" style="padding:6px 12px;font-size:12px;text-decoration:none;">📄 View</a>`
+            : `<span style="font-size:11px;color:var(--text-light);">No PDF</span>`
+          }
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    container.innerHTML = `<p style="color:#dc2626;font-size:13px;text-align:center;">Error: ${e.message}</p>`;
+  }
+}
+
+// ── LOAD DOCTORS ──
+async function loadDoctors() {
+  const container = document.getElementById('doctors-list');
+  container.innerHTML = '<p style="color:var(--text-light);font-size:14px;text-align:center;padding:20px 0;">Loading doctors…</p>';
+
+  try {
+    let doctors = [];
+
+    // Try Supabase first
+    if (!currentUser.isDemo) {
+      doctors = await getDoctors();
+    }
+
+    // Fallback to Flask API
+    if (!doctors || !doctors.length) {
+      const res = await fetch(`${API_BASE}/doctors`);
+      doctors = await res.json();
+    }
+
+    if (!doctors || !doctors.length) {
+      container.innerHTML = `
+        <div style="text-align:center;padding:24px 0;">
+          <p style="color:var(--text-light);font-size:14px;">No doctors available yet.</p>
+          <p style="font-size:12px;color:var(--text-light);margin-top:8px;">Use Demo Doctor login to test the flow.</p>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = doctors.map(d => `
+      <div class="doctor-card" style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div class="avatar" style="width:48px;height:48px;font-size:20px;flex-shrink:0;">${(d.name||'D').charAt(0)}</div>
+            <div>
+              <p style="font-size:14px;font-weight:600;color:var(--text-dark);">${d.name || 'Doctor'}</p>
+              <p style="font-size:12px;color:var(--text-light);">🩺 ${d.specialization || 'Gynecologist'}</p>
+              ${d.location ? `<p style="font-size:11px;color:var(--text-light);">📍 ${d.location}</p>` : ''}
+              ${d.rating ? `<p style="font-size:11px;color:#f59e0b;">⭐ ${d.rating} / 5.0</p>` : ''}
+            </div>
+          </div>
+          <button class="btn-pink" style="padding:8px 16px;font-size:13px;flex-shrink:0;"
+            id="consult-btn-${d.id}"
+            onclick="sendConsultRequest('${d.id}', '${(d.name||'Doctor').replace(/'/g,"\\'")}', this)">
+            Consult
+          </button>
+        </div>
+        ${d.bio ? `<p style="font-size:12px;color:var(--text-mid);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">${d.bio}</p>` : ''}
+      </div>
+    `).join('');
+  } catch(e) {
+    container.innerHTML = `<p style="color:#dc2626;font-size:13px;text-align:center;padding:16px;">Error: ${e.message}</p>`;
+  }
+}
+
+// ── SEND CONSULTATION REQUEST ──
+async function sendConsultRequest(doctorId, doctorName, btnEl) {
+  const originalText = btnEl.innerHTML;
+  btnEl.disabled = true;
+  btnEl.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span>';
+
+  try {
+    let success = false;
+
+    if (!currentUser.isDemo) {
+      // Supabase direct
+      const { data, error } = await createConsultation(currentUser.id, doctorId);
+      if (error) throw new Error(error);
+      success = true;
+    } else {
+      // Flask API
+      const res  = await fetch(`${API_BASE}/request-doctor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ patient_id: currentUser.id, doctor_id: doctorId })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed');
+      success = true;
+    }
+
+    if (success) {
+      showToast(`✅ Consultation request sent to ${doctorName}!`, 'success');
+      btnEl.innerHTML = '✓ Requested';
+      btnEl.style.background = '#dcfce7';
+      btnEl.style.color = '#16a34a';
+    }
+  } catch(e) {
+    showToast('Request failed: ' + e.message, 'error');
+    btnEl.disabled = false;
+    btnEl.innerHTML = originalText;
+  }
+}
+
+// ── MESSAGES INIT ──
+async function initMessages() {
+  // Reset chat poll
+  if (chatPollTimer) clearInterval(chatPollTimer);
+
+  const banner  = document.getElementById('chat-status-banner');
+  const chatBox = document.getElementById('chat-box');
+
+  if (currentUser.isDemo) {
+    // Show doctor selector for demo mode
+    document.getElementById('msg-doctor-selector').style.display = 'block';
+    await loadDoctorsForMsg();
+    return;
+  }
+
+  // Fetch active consultation from Supabase
+  try {
+    const consultation = await getPatientConsultation(currentUser.id);
+
+    if (!consultation) {
+      banner.style.display = 'block';
+      banner.style.background = '#fff7ed';
+      banner.style.color = '#92400e';
+      banner.innerHTML = '⏳ No active consultation yet. Go to <strong>Doctors</strong> tab to request one.';
+      chatBox.innerHTML = `
+        <div style="text-align:center;padding:40px 24px;">
+          <p style="font-size:32px;margin-bottom:8px;">💬</p>
+          <p style="color:var(--text-light);font-size:14px;">Request a consultation with a doctor first</p>
+          <button class="btn-pink" style="margin-top:16px;padding:10px 20px;font-size:13px;" onclick="switchTab('doctors')">
+            👩‍⚕️ Find a Doctor
+          </button>
+        </div>`;
+      return;
+    }
+
+    if (consultation.status === 'pending') {
+      banner.style.display = 'block';
+      banner.style.background = '#fff7ed';
+      banner.style.color = '#92400e';
+      const docName = consultation.doctors?.name || 'your doctor';
+      banner.innerHTML = `⏳ Waiting for <strong>${docName}</strong> to accept your request.`;
+      chatBox.innerHTML = '<div style="text-align:center;padding:32px 0;"><p style="color:var(--text-light);font-size:14px;">Chat will unlock once accepted.</p></div>';
+      return;
+    }
+
+    if (consultation.status === 'accepted') {
+      activeConsultId = consultation.id;
+      const docName   = consultation.doctors?.name || 'Doctor';
+      banner.style.display = 'block';
+      banner.style.background = '#dcfce7';
+      banner.style.color = '#166534';
+      banner.innerHTML = `✅ Connected with <strong>${docName}</strong>`;
+
+      await loadMessages();
+      startRealtimeChat(consultation.id);
+    }
+  } catch(e) {
+    console.error('[Messages]', e.message);
+    // Fallback to doctor selector
+    document.getElementById('msg-doctor-selector').style.display = 'block';
+    await loadDoctorsForMsg();
+  }
+}
+
+// ── LOAD DOCTORS FOR MESSAGE SELECTOR (demo/fallback) ──
+async function loadDoctorsForMsg() {
+  const sel = document.getElementById('msg-doctor-select');
+  try {
+    const res     = await fetch(`${API_BASE}/doctors`);
+    const doctors = await res.json();
+    if (doctors && doctors.length) {
+      sel.innerHTML = '<option value="">— choose doctor —</option>' +
+        doctors.map(d => `<option value="${d.id}">${d.name || 'Doctor'}</option>`).join('');
+    }
+  } catch(e) {
+    console.warn('[loadDoctorsForMsg]', e.message);
+  }
+}
+
+// ── REALTIME CHAT SUBSCRIPTION ──
+function startRealtimeChat(consultationId) {
+  if (activeChannel) activeChannel.unsubscribe();
+
+  activeChannel = subscribeToMessages(consultationId, (newMsg) => {
+    appendPatientMessage(newMsg);
+  });
+
+  // Fallback polling every 3 seconds
+  chatPollTimer = setInterval(async () => {
+    const msgs = await getMessages(consultationId);
+    const chatBox = document.getElementById('chat-box');
+    if (msgs.length > chatBox.children.length) {
+      chatBox.innerHTML = '';
+      msgs.forEach(m => appendPatientMessage(m));
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+  }, 3000);
+}
+
+// ── LOAD MESSAGES ──
+async function loadMessages() {
+  const chatBox = document.getElementById('chat-box');
+  chatBox.innerHTML = '<div style="text-align:center;padding:20px 0;"><span class="spinner" style="border-color:rgba(201,75,106,0.3);border-top-color:var(--pink-600);width:16px;height:16px;"></span></div>';
+
+  try {
+    let msgs = [];
+
+    if (activeConsultId && !currentUser.isDemo) {
+      msgs = await getMessages(activeConsultId);
+    } else {
+      const doctorId = document.getElementById('msg-doctor-select')?.value;
+      if (!doctorId) {
+        chatBox.innerHTML = '<p style="color:var(--text-light);font-size:13px;text-align:center;">Select a doctor to chat</p>';
+        return;
+      }
+      const res = await fetch(`${API_BASE}/messages?user1=${currentUser.id}&user2=${doctorId}`);
+      msgs = await res.json();
+    }
+
+    if (!msgs.length) {
+      chatBox.innerHTML = `
+        <div style="text-align:center;padding:24px 0;">
+          <p style="font-size:24px;margin-bottom:6px;">💬</p>
+          <p style="color:var(--text-light);font-size:13px;">Say hello to start the conversation!</p>
+        </div>`;
+      return;
+    }
+
+    chatBox.innerHTML = '';
+    msgs.forEach(m => appendPatientMessage(m));
+    chatBox.scrollTop = chatBox.scrollHeight;
+  } catch(e) {
+    chatBox.innerHTML = `<p style="color:#dc2626;font-size:13px;text-align:center;">Error: ${e.message}</p>`;
+  }
+}
+
+// ── APPEND MESSAGE (patient view) ──
+// Patient messages → RIGHT (pink), Doctor messages → LEFT (purple)
+function appendPatientMessage(m) {
+  const chatBox  = document.getElementById('chat-box');
+  const isMe     = m.sender_id === currentUser.id; // patient is me
+  const time     = new Date(m.created_at).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+  const div      = document.createElement('div');
+  div.style.cssText = `display:flex;flex-direction:column;align-items:${isMe ? 'flex-end' : 'flex-start'};margin-bottom:4px;`;
+  div.innerHTML = `
+    <div class="${isMe ? 'msg-pink' : 'msg-purple'}">${m.content}</div>
+    <div class="msg-time">${time}</div>
+  `;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+// ── SEND MESSAGE ──
+async function handleSendMessage() {
+  const content = document.getElementById('msg-input').value.trim();
+  if (!content) { showToast('Message cannot be empty', 'error'); return; }
+
+  const btn    = document.getElementById('btn-send-message');
+  const ogNode = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;margin-right:0;"></span>';
+
+  try {
+    if (activeConsultId && !currentUser.isDemo) {
+      const { error } = await sendMessage(activeConsultId, currentUser.id, content);
+      if (error) throw new Error(error);
+      // Optimistically render my message immediately
+      appendPatientMessage({ sender_id: currentUser.id, content, created_at: new Date().toISOString() });
+    } else {
+      const doctorId = document.getElementById('msg-doctor-select')?.value;
+      if (!doctorId) { showToast('Select a doctor first', 'error'); return; }
+      const res  = await fetch(`${API_BASE}/messages/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender_id: currentUser.id, receiver_id: doctorId, content })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      await loadMessages();
+    }
+    document.getElementById('msg-input').value = '';
+  } catch(e) {
+    showToast('Send failed: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = ogNode;
+  }
+}
+
+// ── LOGOUT ──
+async function logout() {
+  const sb = getSupabase();
+  if (sb) {
+    try { await sb.auth.signOut(); } catch(e) {}
+  }
+  if (activeChannel) activeChannel.unsubscribe();
+  if (chatPollTimer) clearInterval(chatPollTimer);
+  localStorage.removeItem('shecare_user');
+  window.location.href = 'login.html';
+}
+
+// ── TOAST ──
+function showToast(msg, type) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type || 'info'}`;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(-10px)';
+    toast.style.transition = 'all 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 3200);
+}
+</script>
+</body>
+</html>
