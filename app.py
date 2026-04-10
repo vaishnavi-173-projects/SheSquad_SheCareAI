@@ -47,7 +47,7 @@ def login_page():
 
 @app.route("/dashboard")
 def dashboard():
-    return render_template("dashboard.html")
+    return render_template("patient_dashboard.html")
 
 @app.route("/doctor-dashboard")
 def doctor_dashboard():
