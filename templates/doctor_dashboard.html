@@ -7,13 +7,13 @@
   <meta name="description" content="SheCare AI doctor portal – manage patient requests, view health summaries, and chat with patients."/>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="styles.css"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-  <script src="config.js"></script>
-  <script src="supabaseClient.js"></script>
-  <script src="db.js"></script>
+  <script src="{{ url_for('static', filename='config.js') }}"></script>
+  <script src="{{ url_for('static', filename='supabaseClient.js') }}"></script>
+  <script src="{{ url_for('static', filename='db.js') }}"></script>
   <style>
     /* ── Patient list sidebar ── */
     .patient-list { display: flex; flex-direction: column; gap: 10px; }
@@ -294,7 +294,7 @@
 
 <script>
 // ── Config ──
-const API_BASE = (window.SHECARE_CONFIG && window.SHECARE_CONFIG.apiBase) || 'http://localhost:5000';
+const API_BASE = (window.SHECARE_CONFIG && window.SHECARE_CONFIG.apiBase) || '';
 
 // ── State ──
 let currentDoctor   = null;
@@ -321,7 +321,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
         // Safety guard
         if (currentDoctor.role !== 'doctor') {
-          window.location.href = 'dashboard.html';
+          window.location.href = '/dashboard';
           return;
         }
         localStorage.setItem('shecare_user', JSON.stringify(currentDoctor));
@@ -333,14 +333,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 2. Fallback: localStorage
   const saved = localStorage.getItem('shecare_user');
-  if (!saved) { window.location.href = 'login.html'; return; }
+  if (!saved) { window.location.href = "{{ url_for('login') }}"; return; }
   try {
     currentDoctor = JSON.parse(saved);
-    if (currentDoctor.role !== 'doctor') { window.location.href = 'patient_dashboard.html'; return; }
+    if (currentDoctor.role !== 'doctor') { window.location.href = "{{ url_for('patient_dashboard') }}"; return; }
     initUI();
   } catch(e) {
     localStorage.removeItem('shecare_user');
-    window.location.href = 'login.html';
+    window.location.href = "{{ url_for('login') }}";
   }
 });
 
@@ -755,7 +755,7 @@ async function updateHighRiskCount() {
   }
 
   try {
-    const API = (window.SHECARE_CONFIG && window.SHECARE_CONFIG.apiBase) || 'http://localhost:5000';
+    const API = (window.SHECARE_CONFIG && window.SHECARE_CONFIG.apiBase) || '';
     let highCount = 0;
     await Promise.all(acceptedIds.map(async (pid) => {
       try {

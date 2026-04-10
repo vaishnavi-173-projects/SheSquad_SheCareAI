@@ -6,3 +6,5 @@ numpy
 fpdf2
 requests
 scikit-learn
+gunicorn
+google-generativeai

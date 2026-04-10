@@ -50,10 +50,13 @@
 
 ```text
 SheCareAI/
-├── frontend/        # Web Interface (HTML/CSS/JS)
-├── backend/         # Flask API & ML Logic
+├── app.py           # Main Flask entry point (UI + API)
+├── model.pkl        # ML Model (PCOS Risk Prediction)
+├── templates/       # HTML Page Templates
+├── static/          # CSS, JS, and Images
+├── requirements.txt # Python Dependencies
+├── Procfile         # Render Deployment Config
 ├── tests/           # Playwright E2E Test Suite
-├── .gitignore       # Production exclusion rules
 └── README.md        # Project Documentation
 ```
 
@@ -67,25 +70,33 @@ git clone https://github.com/vaishnavi-173-projects/SheSquad_SheCareAI.git
 cd SheSquad_SheCareAI
 ```
 
-### 2️⃣ Setup Environment-Variables
-Create a `.env` file in the `backend/` directory:
+### 2️⃣ Setup Environment Variables
+Create a `.env` file in the root directory:
 ```env
 SUPABASE_URL=your_supabase_url
-SUPABASE_ANON_KEY=your_key
+SUPABASE_KEY=your_key
 GEMINI_API_KEY=your_key
+FLASK_SECRET_KEY=your_flask_secret_key
 ```
 
-### 3️⃣ Install & Run Backend
+### 3️⃣ Run Locally
 ```bash
-cd backend
 pip install -r requirements.txt
 python app.py
 ```
-👉 API runs on: `http://localhost:5000`
+👉 Access the app at: `http://localhost:5000`
 
-### 4️⃣ Launch Frontend
-Serve the `frontend/` directory using **Live Server** or any static host.
-👉 UI runs on: `http://localhost:5500`
+---
+
+## 🚀 Deploy to Render
+
+This project is optimized for [Render](https://render.com).
+
+1. **Create a New Web Service**: Select your repository.
+2. **Environment**: Select `Python 3`.
+3. **Build Command**: `pip install -r requirements.txt`.
+4. **Start Command**: `gunicorn app:app`.
+5. **Environment Variables**: Add `SUPABASE_URL`, `SUPABASE_KEY`, `GEMINI_API_KEY`, and `FLASK_SECRET_KEY` in the Render Dashboard.
 
 ---
 

@@ -4,17 +4,17 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SheCare AI – Redirecting…</title>
-  <meta http-equiv="refresh" content="0; url=login.html" />
-  <script>window.location.replace('login.html');</script>
+  <meta http-equiv="refresh" content="0; url=/login" />
+  <script>window.location.replace('/login');</script>
   <meta name="description" content="SheCare AI – AI-powered reproductive health assistant for PCOS risk prediction, health tracking, and doctor-ready reports." />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
-  <script src="config.js"></script>
-  <script src="supabaseClient.js"></script>
+  <script src="{{ url_for('static', filename='config.js') }}"></script>
+  <script src="{{ url_for('static', filename='supabaseClient.js') }}"></script>
   <style>
     .auth-tab { padding:8px 20px; border-radius:50px; font-size:14px; font-weight:500; cursor:pointer; border:none; background:transparent; color:var(--text-mid); transition:all 0.2s; }
     .auth-tab.active { background:var(--pink-600); color:white; box-shadow:0 2px 10px rgba(201,75,106,0.3); }
@@ -206,8 +206,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (saved) {
     try {
       const u = JSON.parse(saved);
-      if (u.role === 'doctor') window.location.href = 'doctor_dashboard.html';
-      else                     window.location.href = 'dashboard.html';
+      if (u.role === 'doctor') window.location.href = '/doctor-dashboard';
+      else                     window.location.href = '/dashboard';
     } catch(e) { localStorage.removeItem('shecare_user'); }
   }
 
@@ -221,10 +221,10 @@ async function redirectByRole(authUser) {
   if (sb) {
     try {
       const { data } = await sb.from('users').select('role').eq('id', authUser.id).single();
-      if (data?.role === 'doctor') { window.location.href = 'doctor_dashboard.html'; return; }
+      if (data?.role === 'doctor') { window.location.href = '/doctor-dashboard'; return; }
     } catch(e) {}
   }
-  window.location.href = 'dashboard.html';
+  window.location.href = '/dashboard';
 }
 
 // ── SIGN UP ──
@@ -264,7 +264,7 @@ async function handleSignup() {
       // Auto-confirmed
       await upsertUser(data.user, 'patient');
       showToast('🌸 Welcome to SheCare AI!', 'success');
-      setTimeout(() => window.location.href = 'dashboard.html', 800);
+      setTimeout(() => window.location.href = '/dashboard', 800);
     }
   } catch(e) {
     showToast(e.message || 'Signup failed', 'error');
@@ -311,7 +311,7 @@ async function loginWithGoogle() {
     const { error } = await sb.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: cfg.redirectBase + '/frontend/dashboard.html'
+        redirectTo: cfg.redirectBase + '/dashboard'
       }
     });
     if (error) throw error;
@@ -331,7 +331,7 @@ function loginAsDoctor() {
   };
   localStorage.setItem('shecare_user', JSON.stringify(doctorUser));
   showToast('🩺 Logging in as Doctor…', 'success');
-  setTimeout(() => window.location.href = 'doctor_dashboard.html', 700);
+  setTimeout(() => window.location.href = '/doctor-dashboard', 700);
 }
 
 // ── DEMO FALLBACK (no Supabase key) ──
@@ -343,7 +343,7 @@ function demoLogin(name, email, age, role) {
   localStorage.setItem('shecare_user', JSON.stringify(user));
   showToast('🌸 Welcome (Demo Mode)!', 'success');
   setTimeout(() => {
-    window.location.href = role === 'doctor' ? 'doctor_dashboard.html' : 'dashboard.html';
+    window.location.href = role === 'doctor' ? '/doctor-dashboard' : '/dashboard';
   }, 700);
 }
 

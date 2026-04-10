@@ -8,7 +8,7 @@
 (function () {
   const cfg = window.SHECARE_CONFIG;
   if (!cfg || !cfg.supabaseUrl || cfg.supabaseKey === 'YOUR_SUPABASE_ANON_KEY_HERE') {
-    console.error('[SheCare] ⚠️  Supabase key not configured. Open frontend/config.js and paste your ANON KEY.');
+    console.error('[SheCare] ⚠️ Supabase key not configured. Open static/config.js and paste your ANON KEY.');
     window._supabaseReady = false;
     return;
   }

@@ -7,13 +7,13 @@
   <meta name="description" content="SheCare AI – Sign in or create an account to access your AI-powered reproductive health assistant." />
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
-  <script src="config.js"></script>
-  <script src="supabaseClient.js"></script>
-  <script src="db.js"></script>
+  <script src="{{ url_for('static', filename='config.js') }}"></script>
+  <script src="{{ url_for('static', filename='supabaseClient.js') }}"></script>
+  <script src="{{ url_for('static', filename='db.js') }}"></script>
   <style>
     .auth-tab { padding:8px 20px; border-radius:50px; font-size:14px; font-weight:500; cursor:pointer; border:none; background:transparent; color:var(--text-mid); transition:all 0.2s; }
     .auth-tab.active { background:var(--pink-600); color:white; box-shadow:0 2px 10px rgba(201,75,106,0.3); }
@@ -245,8 +245,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   if (saved) {
     try {
       const u = JSON.parse(saved);
-      if (u.role === 'doctor') window.location.href = 'doctor_dashboard.html';
-      else                     window.location.href = 'patient_dashboard.html';
+      if (u.role === 'doctor') window.location.href = '/doctor-dashboard';
+      else                     window.location.href = '/patient-dashboard';
     } catch(e) { localStorage.removeItem('shecare_user'); }
   }
 
@@ -260,13 +260,13 @@ async function redirectByRole(authUser) {
     try {
       const { data } = await sb.from('users').select('role').eq('id', authUser.id).single();
       if (data?.role === 'doctor') {
-        window.location.href = 'doctor_dashboard.html';
+        window.location.href = '/doctor-dashboard';
         return;
       }
     } catch(e) { console.warn('Role fetch error:', e.message); }
   }
   // Default patient redirect
-  window.location.href = 'patient_dashboard.html';
+  window.location.href = '/patient-dashboard';
 }
 
 // ── SIGN UP ──
@@ -306,7 +306,7 @@ async function handleSignup() {
       await upsertUser(data.user, selectedRole);
       showToast(selectedRole === 'doctor' ? '🩺 Welcome Dr. ' + name + '!' : '🌸 Welcome to SheCare AI!', 'success');
       setTimeout(() => {
-        window.location.href = selectedRole === 'doctor' ? 'doctor_dashboard.html' : 'patient_dashboard.html';
+        window.location.href = selectedRole === 'doctor' ? '/doctor-dashboard' : '/patient-dashboard';
       }, 800);
     }
   } catch(e) {
@@ -354,7 +354,7 @@ async function loginWithGoogle() {
     const { error } = await sb.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: cfg.redirectBase + '/frontend/patient_dashboard.html'
+        redirectTo: cfg.redirectBase + '/patient_dashboard'
       }
     });
     if (error) throw error;
@@ -375,7 +375,7 @@ function demoPatientLogin() {
   };
   localStorage.setItem('shecare_user', JSON.stringify(user));
   showToast('🌸 Loading Demo Patient…', 'success');
-  setTimeout(() => window.location.href = 'patient_dashboard.html', 700);
+  setTimeout(() => window.location.href = '/patient-dashboard', 700);
 }
 
 // ── DEMO DOCTOR LOGIN ──
@@ -389,7 +389,7 @@ function demoDoctorLogin() {
   };
   localStorage.setItem('shecare_user', JSON.stringify(user));
   showToast('🩺 Loading Demo Doctor…', 'success');
-  setTimeout(() => window.location.href = 'doctor_dashboard.html', 700);
+  setTimeout(() => window.location.href = '/doctor-dashboard', 700);
 }
 
 // ── DEMO FALLBACK (no Supabase key) ──
@@ -401,7 +401,7 @@ function demoFallback(name, email, age, role) {
   localStorage.setItem('shecare_user', JSON.stringify(user));
   showToast('🌸 Welcome (Demo Mode)!', 'success');
   setTimeout(() => {
-    window.location.href = role === 'doctor' ? 'doctor_dashboard.html' : 'patient_dashboard.html';
+    window.location.href = role === 'doctor' ? '/doctor-dashboard' : '/patient-dashboard';
   }, 700);
 }
 

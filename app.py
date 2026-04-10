@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file, session
+from flask import Flask, request, jsonify, send_file, session, render_template
 from flask_cors import CORS
 from dotenv import load_dotenv
 import os
@@ -14,9 +14,15 @@ import google.generativeai as genai
 
 load_dotenv()
 
-app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "shecare_secret_2024")
+app = Flask(__name__, static_folder='static', template_folder='templates')
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "shecare_secret_2024")
+
+# CORS setup
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+
+@app.route("/health")
+def health():
+    return {"status": "ok"}
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -26,6 +32,30 @@ HEADERS = {
     "Content-Type": "application/json",
     "Prefer": "return=representation"
 }
+
+# ─────────────────────────────────────────────
+# PAGE ROUTES
+# ─────────────────────────────────────────────
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+@app.route("/login")
+def login_page():
+    return render_template("login.html")
+
+@app.route("/dashboard")
+def dashboard():
+    return render_template("dashboard.html")
+
+@app.route("/doctor-dashboard")
+def doctor_dashboard():
+    return render_template("doctor_dashboard.html")
+
+@app.route("/patient-dashboard")
+def patient_dashboard():
+    return render_template("patient_dashboard.html")
 
 # Load ML model once at startup
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.pkl")
@@ -862,15 +892,6 @@ def doctor_patient_reports():
 # HEALTH CHECK
 # ─────────────────────────────────────────────
 
-@app.route("/", methods=["GET"])
-def health_check():
-    return jsonify({
-        "status":       "ok",
-        "app":          "SheCare AI Backend",
-        "model_loaded": model is not None,
-        "supabase_url": SUPABASE_URL or "not configured"
-    })
-
-
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
